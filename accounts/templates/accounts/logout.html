@@ -1,17 +1,25 @@
 {% extends "core/base.html" %}
 {% load static %}
 
-{% block title %}J-Noon Flooring Specialist | Logout{% endblock %}
+{% block title %}J-Noon Flooring Specialist | Log out{% endblock %}
 
 {% block body_class %}page-logout{% endblock %}
 
 {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
     <link rel="stylesheet" href="{% static 'accounts/css/logout.css' %}">
 {% endblock %}
 
 {% block content %}
-    <h1>Logout</h1>
-    <p>This is the logout page.</p>
+<div class="auth">
+    <h1>Log out</h1>
+
+    <form class="auth__form" method="post" action="{% url 'accounts:logout' %}">
+        {% csrf_token %}
+        <p>Are you sure you want to log out?</p>
+        <button type="submit" class="auth__submit">Log out</button>
+    </form>
+</div>
 {% endblock %}
 
 {% block extra_js %}

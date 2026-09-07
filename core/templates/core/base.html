@@ -30,9 +30,10 @@
                             <a class="menu__link" href="{% url 'bookings:index' %}">Bookings</a>
                         {% endif %}
                         {% if user.is_authenticated %}
-                            {% if current != "accounts:logout" %}
-                                <a class="menu__link" href="{% url 'accounts:logout' %}">Logout</a>
-                            {% endif %}
+                            <form class="menu__logout" method="post" action="{% url 'accounts:logout' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="menu__link menu__link--button">Logout</button>
+                            </form>
                         {% else %}
                             {% if current != "accounts:login" %}
                                 <a class="menu__link" href="{% url 'accounts:login' %}">Login</a>
@@ -66,6 +67,14 @@
     </header>
 
     <main class="site-main">
+        {% if messages %}
+            <ul class="messages" role="status" aria-live="polite">
+                {% for message in messages %}
+                    <li class="message message--{{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 

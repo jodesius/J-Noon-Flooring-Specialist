@@ -6,12 +6,40 @@
 {% block body_class %}page-login{% endblock %}
 
 {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
     <link rel="stylesheet" href="{% static 'accounts/css/login.css' %}">
 {% endblock %}
 
 {% block content %}
-    <h1>Login</h1>
-    <p>This is the login page.</p>
+<div class="auth">
+    <h1>Log in</h1>
+
+    <form class="auth__form" method="post" action="{% url 'accounts:login' %}" novalidate>
+        {% csrf_token %}
+        {% if request.GET.next %}
+            <input type="hidden" name="next" value="{{ request.GET.next }}">
+        {% endif %}
+
+        <div class="auth__field">
+            <label for="{{ form.username.id_for_label }}">Email or username</label>
+            {{ form.username }}
+        </div>
+
+        <div class="auth__field">
+            <label for="{{ form.password.id_for_label }}">Password</label>
+            {{ form.password }}
+        </div>
+
+        <button type="submit" class="auth__submit">Log in</button>
+    </form>
+
+    <p class="auth__aside">
+        <a href="{% url 'accounts:password_reset' %}">Forgot password?</a>
+    </p>
+    <p class="auth__aside">
+        No account yet? <a href="{% url 'accounts:register' %}">Register</a>
+    </p>
+</div>
 {% endblock %}
 
 {% block extra_js %}

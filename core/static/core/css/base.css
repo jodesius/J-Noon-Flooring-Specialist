@@ -116,6 +116,18 @@ body {
 }
 .menu__link:hover { background: rgba(255, 255, 255, 0.10); }
 
+/* "Logout" is a POST form styled to match the other menu links. */
+.menu__logout { margin: 0; }
+.menu__link--button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    font-family: inherit;
+    cursor: pointer;
+}
+
 /* ---------- User badge (top-right) ---------- */
 .user-badge {
     display: inline-flex;
@@ -134,6 +146,25 @@ body {
     color: var(--text-muted);
     white-space: nowrap;
 }
+
+/* ---------- Flash messages ---------- */
+.messages {
+    list-style: none;
+    max-width: 640px;
+    margin: 1rem auto 0;
+    padding: 0 1rem;
+}
+.message {
+    padding: 0.7rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    text-align: center;
+}
+.message--success { background: #e3f4e4; color: #1f5b2d; border: 1px solid #b7dcbb; }
+.message--error   { background: #fbe6e6; color: #8a1f1f; border: 1px solid #e0b1b1; }
+.message--info,
+.message--warning { background: #eef1f4; color: #2b2b2b; border: 1px solid #ccd3da; }
 
 /* ---------- Main + footer ---------- */
 .site-main { flex: 1 0 auto; }
