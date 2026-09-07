@@ -1,0 +1,17 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Home{% endblock %}
+
+{% block body_class %}page-home{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'core/css/home.css' %}">
+{% endblock %}
+
+{% block content %}
+    <section class="home">
+        <h1 class="home__title">Title</h1>
+        <p class="home__text">Paragraph.</p>
+    </section>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}J-Noon Flooring Specialist{% endblock %}</title>
+
+    <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+
+    <header class="site-header">
+        <div class="header-col header-col--left">
+            <details class="menu" id="main-menu">
+                <summary class="menu__button" aria-label="Open menu">
+                    <span class="menu__bars" aria-hidden="true"></span>
+                    <span class="menu__label">Menu</span>
+                </summary>
+                <nav class="menu__panel" aria-label="Main navigation">
+                    <a class="menu__link" href="#">Page One</a>
+                    <a class="menu__link" href="#">Page Two</a>
+                    <a class="menu__link" href="#">Page Three</a>
+                </nav>
+            </details>
+        </div>
+
+        <div class="header-col header-col--center">
+            <span class="site-title">{% block header_title %}J-Noon Flooring Specialist{% endblock %}</span>
+        </div>
+
+        <div class="header-col header-col--right">
+            <div class="user-badge">
+                <svg class="user-badge__avatar" viewBox="0 0 64 64" role="img"
+                     aria-label="Profile picture">
+                    <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
+                    <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
+                    <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
+                </svg>
+                <span class="user-badge__name">
+                    {% if user.is_authenticated %}{{ user.get_username }}{% else %}Not logged in{% endif %}
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="site-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <p class="site-footer__text">
+            &copy; {% now "Y" %} J-Noon Flooring Specialist. All rights reserved.
+        </p>
+    </footer>
+
+    <script src="{% static 'core/js/base.js' %}" defer></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
