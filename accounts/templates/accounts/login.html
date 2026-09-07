@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Login{% endblock %}
+
+{% block body_class %}page-login{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/login.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Login</h1>
+    <p>This is the login page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'accounts/js/login.js' %}" defer></script>
+{% endblock %}

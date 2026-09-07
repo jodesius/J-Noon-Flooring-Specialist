@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Bookings{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Bookings</h1>
+    <p>This is the bookings page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'bookings/js/bookings.js' %}" defer></script>
+{% endblock %}

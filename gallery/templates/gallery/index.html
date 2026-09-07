@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Work Gallery{% endblock %}
+
+{% block body_class %}page-gallery{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'gallery/css/gallery.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Work Gallery</h1>
+    <p>This is the work gallery page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'gallery/js/gallery.js' %}" defer></script>
+{% endblock %}

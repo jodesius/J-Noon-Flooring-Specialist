@@ -19,9 +19,29 @@
                     <span class="menu__label">Menu</span>
                 </summary>
                 <nav class="menu__panel" aria-label="Main navigation">
-                    <a class="menu__link" href="#">Page One</a>
-                    <a class="menu__link" href="#">Page Two</a>
-                    <a class="menu__link" href="#">Page Three</a>
+                    {% with current=request.resolver_match.view_name %}
+                        {% if current != "core:home" %}
+                            <a class="menu__link" href="{% url 'core:home' %}">Home</a>
+                        {% endif %}
+                        {% if current != "gallery:index" %}
+                            <a class="menu__link" href="{% url 'gallery:index' %}">Work Gallery</a>
+                        {% endif %}
+                        {% if current != "bookings:index" %}
+                            <a class="menu__link" href="{% url 'bookings:index' %}">Bookings</a>
+                        {% endif %}
+                        {% if user.is_authenticated %}
+                            {% if current != "accounts:logout" %}
+                                <a class="menu__link" href="{% url 'accounts:logout' %}">Logout</a>
+                            {% endif %}
+                        {% else %}
+                            {% if current != "accounts:login" %}
+                                <a class="menu__link" href="{% url 'accounts:login' %}">Login</a>
+                            {% endif %}
+                            {% if current != "accounts:register" %}
+                                <a class="menu__link" href="{% url 'accounts:register' %}">Register</a>
+                            {% endif %}
+                        {% endif %}
+                    {% endwith %}
                 </nav>
             </details>
         </div>

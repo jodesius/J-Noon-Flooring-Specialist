@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Logout{% endblock %}
+
+{% block body_class %}page-logout{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/logout.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Logout</h1>
+    <p>This is the logout page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'accounts/js/logout.js' %}" defer></script>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Register{% endblock %}
+
+{% block body_class %}page-register{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/register.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Register</h1>
+    <p>This is the register page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'accounts/js/register.js' %}" defer></script>
+{% endblock %}
