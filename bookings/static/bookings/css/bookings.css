@@ -2,15 +2,12 @@
    Bookings page styles
    ============================================================ */
 
-body {
+.page-bookings {
+    background-color: #6b4423;   /* oak brown - matches home "about" + gallery */
+}
+
+.page-bookings h1,
+.page-bookings p {
+    color: #fff;
     text-align: center;
-    background-color: #5A330A;
-}
-
-h1 {
-    color: white;
-}
-
-p {
-    color: white;
 }
