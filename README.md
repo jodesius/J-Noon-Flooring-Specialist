@@ -20,6 +20,7 @@ firms with only branding, content and configuration changes.
 - [Configuration](#configuration)
 - [Database](#database)
 - [Email](#email)
+- [Media storage](#media-storage)
 - [Running the test suite](#running-the-test-suite)
 - [Production deployment](#production-deployment)
 - [Re-using this design for another firm](#re-using-this-design-for-another-firm)
@@ -32,8 +33,9 @@ firms with only branding, content and configuration changes.
 
 A multi-page Django site with:
 
-- A built-out **home page** (hero, about, and a live "Reviews" strip) plus
-  work-gallery and bookings pages (still placeholders being built out).
+- A built-out **home page** (hero, about, and a live "Reviews" strip) and a
+  **work gallery** (filterable masonry grid + lightbox, photos managed in the
+  admin). Bookings is still a placeholder being built out.
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -83,8 +85,36 @@ Dependencies are pinned in `requirements.txt`.
   photo of real work (crop tuned with `object-position`), an "About"
   section, and a "Reviews" strip showing the six most recent approved
   review postcards with a *See all reviews* link.
-- `gallery` and `bookings` are wired routes with placeholder content,
-  ready to be built out.
+- `bookings` is a wired route with placeholder content, ready to be built
+  out.
+
+### Work gallery (`gallery`)
+
+- A **masonry grid** of completed-work photos. Images keep their real
+  proportions and tile like brickwork; the column count steps up with screen
+  width — **1** column on phones, **2** on large phones (≥ 425px), **3** on
+  tablets (≥ 768px), **4** on desktop (≥ 1024px), **5** on 2K/4K displays
+  (≥ 2560px).
+- **Category filter bar** — one button per flooring type (Laminate, LVT,
+  Amtico, …). Filtering is instant and client-side; only categories that
+  actually have a published photo get a button. A starter set of categories
+  is seeded by a migration and is fully editable in the admin.
+- **Lightbox** — clicking a photo opens it enlarged in an overlay with
+  next/prev (scoped to the current filter), a caption, keyboard support
+  (`←` `→` `Esc`) and a backdrop-click close. Vanilla JS, no library.
+- Photos are **managed entirely in the Django admin** (`GalleryImage`):
+  upload, title, alt text, category, a *show on site* toggle, and a
+  `sort_order`. A thumbnail preview shows in the change form and the list.
+- Grid and lightbox images are served at sensible sizes via **Cloudinary
+  transformations** (`f_auto,q_auto,c_limit,w_900` / `w_1800`) built onto
+  the stored URL — the original upload is never sent to the browser.
+- Image dimensions are captured on upload and written as `width`/`height`
+  attributes, so the grid does not reflow as photos load.
+- Deleting or replacing a photo in the admin removes the database row but
+  (by Django's design) leaves the old file in storage. `python manage.py
+  prune_gallery_media` deletes storage files that no longer have a row
+  (`--dry-run` to preview, `--yes` to skip the prompt); it works against
+  Cloudinary or the local `media/` folder.
 
 ### Client reviews (`reviews`)
 
@@ -165,6 +195,9 @@ Three access tiers, using Django's built-in auth:
   toggle on the review list, with bulk *Approve* / *Unapprove* actions.
   Reviews cannot be created in the admin (clients post them through the
   site).
+- **Gallery photos** are managed in the admin: `GalleryImage` (with a
+  thumbnail preview, inline `category` / `is_published` / `sort_order`
+  editing) and `Category`.
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
   every permission for the project's own apps and **none** for Django's
@@ -291,23 +324,25 @@ today, grouped by concern:
 - Request body size is capped (`DATA_UPLOAD_MAX_MEMORY_SIZE`,
   `FILE_UPLOAD_MAX_MEMORY_SIZE`).
 
-### File uploads (profile images, review photos)
+### File uploads (profile images, review photos, gallery photos)
 
 - **Type is verified by parsing the file with Pillow**, not by trusting the
   file extension or the browser-supplied content type. Profile images accept
-  real PNG / JPEG only; review photos accept real JPEG / PNG / WebP only. A
-  renamed `.png`, a BMP, a GIF, or a text file are all rejected.
+  real PNG / JPEG only; review and gallery photos accept real JPEG / PNG /
+  WebP only. A renamed `.png`, a BMP, a GIF, or a text file are all rejected.
 - Hard size limit checked **before** the file is parsed: **1 MB** for
-  profile images, **4 MB** for review photos.
-- Stored under a random UUID name (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`
-  or `<CLOUDINARY_FOLDER>/reviews/<uuid>`), so the path exposes no user
-  identifier and images cannot be enumerated. Uploads go to Cloudinary
-  (served from its CDN); the local `media/` folder is the fallback when
-  Cloudinary is not configured.
+  profile images, **4 MB** for review photos, **10 MB** for gallery photos.
+- Stored under a random UUID name
+  (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`, `.../reviews/<uuid>`, or
+  `.../gallery/<uuid>`), so the path exposes no user identifier and images
+  cannot be enumerated. Uploads go to Cloudinary (served from its CDN); the
+  local `media/` folder is the fallback when Cloudinary is not configured.
 - Replacing an image just means uploading a new one — there is no "delete"
-  control on either form.
+  control on the profile or review forms.
 - Profile images have a client-side pre-check and live preview for fast
   feedback; the server-side validation is always authoritative.
+- Gallery photos are uploaded only by staff through the admin, but they run
+  the same Pillow validation as everything else.
 
 ### Transport and headers
 
@@ -371,7 +406,16 @@ J-Flooring-Specialist/
 │   ├── migrations/
 │   ├── templates/reviews/  # list, form, delete confirm, _postcard, _stars
 │   └── static/reviews/     # reviews.css
-├── gallery/                # work gallery (placeholder route)
+├── gallery/                # filterable work-gallery grid + lightbox
+│   ├── models.py           # GalleryImage, Category
+│   ├── validators.py       # gallery-photo validation (Pillow, 10 MB)
+│   ├── admin.py            # image + category admin, thumbnail previews
+│   ├── views.py            # published images + categories-with-photos
+│   ├── tests.py            # published filter, category filter, model rules
+│   ├── management/commands/ # prune_gallery_media
+│   ├── migrations/         # 0001 initial, 0002 seed starter categories
+│   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
+│   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
 ├── bookings/               # bookings (placeholder route)
 ├── manage.py
 ├── requirements.txt
@@ -515,8 +559,9 @@ from a domain you own and authenticate (SPF, DKIM, DMARC) — see the roadmap.
 
 ## Media storage
 
-User uploads (profile images and review photos) go to **Cloudinary** when
-`CLOUDINARY_URL` is set, otherwise to the local `media/` folder.
+User uploads (profile images, review photos and gallery photos) go to
+**Cloudinary** when `CLOUDINARY_URL` is set, otherwise to the local `media/`
+folder.
 
 1. Create a free account at <https://cloudinary.com>.
 2. On the dashboard, copy the whole **API environment variable** —
@@ -530,18 +575,25 @@ backend based on whether a valid `CLOUDINARY_URL` is present. Files keep
 their random UUID names inside `CLOUDINARY_FOLDER`; Cloudinary serves them
 from its CDN.
 
+Django never deletes an upload when its model row goes away, so replacing or
+deleting a gallery photo in the admin leaves the old file behind. Run
+`python manage.py prune_gallery_media` now and then (or `--dry-run` first) to
+clear those orphans out of Cloudinary.
+
 ---
 
 ## Running the test suite
 
 ```bash
-python manage.py test          # whole suite
-python manage.py test reviews   # just the reviews app
+python manage.py test           # whole suite
+python manage.py test reviews    # just the reviews app
+python manage.py test gallery    # just the gallery app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value, and a manual end-to-end pass in the
-browser for the full user journey and the look of each page.
+tests where they add lasting value (currently **17**, in `reviews` and
+`gallery`), and a manual end-to-end pass in the browser for the full user
+journey and the look of each page.
 
 **Automated tests**
 
@@ -553,6 +605,11 @@ browser for the full user journey and the look of each page.
   - **IDOR guard** — a user cannot edit another user's review (404);
   - **delete-permission matrix** — allowed for the author, a Site
     Administrator and the superuser; refused for an unrelated user.
+- The **`gallery` app has a test suite** (`gallery/tests.py`): only
+  `is_published` photos are shown, the filter bar lists only categories that
+  have a published photo, the empty state renders, category slugs are
+  auto-generated, image dimensions are captured on upload, and
+  `prune_gallery_media` deletes only files with no database row.
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -570,6 +627,11 @@ Done end-to-end for every feature so far, most recently:
 - Accounts: registration, login by username *and* by email, logout,
   password-reset including real SMTP delivery, email verification, and the
   profile / avatar-upload flow.
+- Gallery: upload photos of several shapes through the admin, confirm the
+  masonry grid stays tidy and the column count changes at each breakpoint
+  (1 / 2 / 3 / 4 / 5), the category buttons filter instantly, and the
+  lightbox opens, captions, navigates within the current filter, and closes
+  on `Esc` / backdrop click.
 - All of the security behaviours described above.
 
 > The test runner creates a temporary `test_` database. Against Neon this
@@ -614,7 +676,11 @@ configuration, and the page/CSS/JS structure. To rebrand:
 - **Imagery** — the home hero image (`core/templates/core/home.html`), the
   review-postcard backing (`--rv-postcard-bg` in
   `reviews/static/reviews/css/reviews.css`), and the default review photo
-  (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`).
+  (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`). Gallery photos and their
+  categories are all admin data — no code changes.
+- **Gallery breakpoints** — the `column-count` media queries in
+  `gallery/static/gallery/css/gallery.css` if a firm wants a different
+  column progression.
 - **Configuration** — a fresh `.env` (new secret key, new database, new
   email account).
 
@@ -630,7 +696,10 @@ shared code.
 - [x] Home page — hero (real work photo), about, recent-reviews strip
 - [x] Client reviews — full CRUD, star rating, photo upload, admin approval
       gate, photo-backed postcards
-- [ ] Build out the work gallery (upload, categories, lightbox)
+- [x] Work gallery — admin-managed photos, responsive masonry grid,
+      category filter, lightbox
+- [ ] Gallery follow-ups: per-image ordering by drag, optional captions in
+      the lightbox, "load more" if the library gets large
 - [ ] Bookings: real enquiry form, availability, confirmation emails
 - [ ] Contact / quote request pages
 - [ ] Rewards scheme

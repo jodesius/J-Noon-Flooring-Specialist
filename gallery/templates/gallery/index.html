@@ -10,8 +10,57 @@
 {% endblock %}
 
 {% block content %}
-    <h1>Work Gallery</h1>
-    <p>This is the work gallery page.</p>
+<section class="gallery">
+    <header class="gallery__head">
+        <h1>Work Gallery</h1>
+        <p>A selection of floors fitted by J-Noon Flooring Specialist across the Chelmsford area.</p>
+    </header>
+
+    {% if categories %}
+        <div class="gallery__filters" role="group" aria-label="Filter photos by flooring type">
+            <button type="button" class="gallery__filter is-active" data-filter="all" aria-pressed="true">
+                All
+            </button>
+            {% for cat in categories %}
+                <button type="button" class="gallery__filter" data-filter="{{ cat.slug }}" aria-pressed="false">
+                    {{ cat.name }}
+                </button>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if images %}
+        <ul class="gallery-grid" id="gallery-grid">
+            {% for img in images %}
+                <li class="gallery-grid__item"
+                    data-category="{{ img.category.slug|default:'' }}">
+                    <button type="button" class="gallery-card"
+                            data-full="{{ img.full_url }}"
+                            data-title="{{ img.title }}">
+                        <img src="{{ img.thumb_url }}" alt="{{ img.display_alt }}"
+                             loading="lazy" decoding="async"
+                             {% if img.width and img.height %}width="{{ img.width }}" height="{{ img.height }}"{% endif %}>
+                        {% if img.title %}<span class="gallery-card__label">{{ img.title }}</span>{% endif %}
+                    </button>
+                </li>
+            {% endfor %}
+        </ul>
+        <p class="gallery__noresults" hidden>No photos in that category yet.</p>
+    {% else %}
+        <p class="gallery__empty">Photos coming soon.</p>
+    {% endif %}
+</section>
+
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true"
+     aria-label="Gallery image viewer">
+    <button type="button" class="lightbox__close" data-lb-close aria-label="Close viewer">&times;</button>
+    <button type="button" class="lightbox__nav lightbox__nav--prev" data-lb-prev aria-label="Previous photo">&#8249;</button>
+    <figure class="lightbox__figure">
+        <img class="lightbox__img" id="lightbox-img" src="" alt="">
+        <figcaption class="lightbox__caption" id="lightbox-caption"></figcaption>
+    </figure>
+    <button type="button" class="lightbox__nav lightbox__nav--next" data-lb-next aria-label="Next photo">&#8250;</button>
+</div>
 {% endblock %}
 
 {% block extra_js %}
