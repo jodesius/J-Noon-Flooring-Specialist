@@ -67,9 +67,12 @@ Dependencies are pinned in `requirements.txt`.
 ### Public site (`core`, `gallery`, `bookings`)
 
 - Shared `base.html` layout: walnut header with a collapsible navigation
-  menu, centred site title, user badge, and footer.
+  menu, a centred brand wordmark (links home), and the user badge; footer
+  carries the company logo (served from Cloudinary).
 - Context-aware navigation — the current page is hidden from the menu, and
   the menu shows *Login / Register* or *Logout* depending on auth state.
+- When signed in, the header avatar + name is a link straight to the
+  profile page.
 - Per-page CSS and JS, namespaced by app.
 - `gallery` and `bookings` are wired routes with placeholder content,
   ready to be built out.
@@ -81,7 +84,7 @@ Dependencies are pinned in `requirements.txt`.
 | `/accounts/register/` | Create an account — email, username, password, confirm password |
 | `/accounts/login/` | Log in with **username or email** |
 | `/accounts/logout/` | Log out (POST only) |
-| `/accounts/profile/` | Edit your own profile |
+| `/accounts/profile/` | View your own profile (`?edit=1` to edit) |
 | `/accounts/password-reset/` | Request a reset link by email |
 | `/accounts/reset/<uidb64>/<token>/` | Set a new password from an emailed link |
 | `/accounts/verify-email/<uidb64>/<token>/` | Confirm an email address from an emailed link |
@@ -99,8 +102,12 @@ Dependencies are pinned in `requirements.txt`.
   phone and email, an "about me" section, and social links
   (Facebook, Instagram, LinkedIn, website). One profile per user, created
   automatically on registration.
-- The uploaded avatar replaces the default icon beside the username in the
-  site header.
+- The profile page is **read-only by default** with an *Edit profile*
+  button; saving returns to the read-only view. The registered email is
+  shown but never editable there.
+- Changing the picture means uploading a new one — it replaces the old
+  (no "clear" control). The uploaded avatar replaces the default icon
+  beside the username in the site header. Images are stored on Cloudinary.
 
 ### Admin & roles
 
@@ -189,11 +196,11 @@ today, grouped by concern:
 
 ### Access control / authorisation
 
-- The profile page is `@login_required` and **always operates on
-  `request.user`**. There is no user id, primary key, username or other
-  identifier anywhere in a profile URL, form field, or hidden input —
-  so one account cannot view or modify another (no IDOR / horizontal
-  privilege escalation).
+- The profile page (both the read-only view and the `?edit=1` form) is
+  `@login_required` and **always operates on `request.user`**. There is no
+  user id, primary key, username or other identifier anywhere in a profile
+  URL, form field, or hidden input — so one account cannot view or modify
+  another (no IDOR / horizontal privilege escalation).
 - Profiles are private: there are no public profile pages.
 - **Vertical privilege escalation** is blocked in the admin: the Site
   Administrators group holds no `auth`-app permissions, and non-superusers
@@ -223,10 +230,10 @@ today, grouped by concern:
   JPEG images are accepted; a renamed `.png`, a BMP, a GIF, or a text file
   are all rejected.
 - Hard **1 MB size limit**, checked before the file is parsed.
-- Stored under a random UUID name (`profile_images/<uuid>`), so the path
-  exposes no user identifier and images cannot be enumerated. Uploads go to
-  Cloudinary (served from its CDN); the `media/` folder is the fallback when
-  Cloudinary is not configured.
+- Stored under a random UUID name (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`),
+  so the path exposes no user identifier and images cannot be enumerated.
+  Uploads go to Cloudinary (served from its CDN); the local `media/` folder
+  is the fallback when Cloudinary is not configured.
 - Replacing the picture just means uploading a new one — there is no
   "delete" control on the form.
 - Client-side pre-check and live preview for fast feedback; the server-side

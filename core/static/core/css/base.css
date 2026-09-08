@@ -44,11 +44,43 @@ body {
 .header-col--center { justify-self: center; }
 .header-col--right  { justify-self: end; }
 
-.site-title {
+/* ---------- Brand wordmark (header centre) ---------- */
+.site-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: var(--text-on-wood);
+    padding: 0.2rem 0.4rem;
+    border-radius: 8px;
+}
+.site-brand:hover .site-brand__name {
+    text-decoration: underline;
+}
+.site-brand:focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.site-brand__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 2px solid var(--wood-accent);
+    border-radius: 8px;
+    font-weight: 800;
     font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
+    color: var(--wood-accent);
+    flex-shrink: 0;
+}
+.site-brand__name {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
     white-space: nowrap;
+    line-height: 1.1;
 }
 
 /* ---------- Dropdown menu (top-left) ---------- */
@@ -192,10 +224,21 @@ body {
     background: var(--wood-header);
     color: var(--text-muted);
     border-top: 3px solid var(--edge);
-    padding: 1.25rem;
-    text-align: center;
+    padding: 0.7rem 1.25rem;
 }
-.site-footer__text { margin: 0; font-size: 0.9rem; }
+.site-footer__inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+}
+.site-footer__logo {
+    height: 40px;
+    width: auto;
+    border-radius: 4px;
+}
+.site-footer__text { margin: 0; font-size: 0.85rem; }
 
 /* ---------- Focus visibility ---------- */
 :focus-visible {
@@ -204,9 +247,10 @@ body {
 }
 
 /* ---------- Small screens ---------- */
-@media (max-width: 640px) {
+@media (max-width: 720px) {
     .site-header { grid-template-columns: auto 1fr auto; gap: 0.5rem; }
-    .menu__label       { display: none; }
-    .site-title        { font-size: 0.95rem; white-space: normal; }
-    .user-badge__name  { display: none; }
+    .menu__label         { display: none; }
+    .site-brand__name    { font-size: 1.05rem; white-space: normal; }
+    .site-brand__mark    { width: 2rem; height: 2rem; font-size: 0.95rem; }
+    .user-badge__name    { display: none; }
 }
