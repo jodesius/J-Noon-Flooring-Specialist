@@ -1,0 +1,245 @@
+/* ============================================================
+   Reviews - postcard grid, single postcard, review form.
+   Palette follows core/base.css (wood-flooring theme).
+   The postcard "wood backing" is pure CSS so it can be
+   re-skinned, or replaced with a texture image, per client.
+   ============================================================ */
+
+:root {
+    --rv-ink:        #2b2b2b;
+    --rv-wood-dark:  #5a3b28;
+    --rv-wood-mid:   #6f4a30;
+    --rv-wood-light: #82593b;
+    --rv-gold:       #f4c430;
+    --rv-card-edge:  #ffffff;
+    --rv-page-bg:    #f5efe8;
+
+    /* Texture behind each postcard's text (a floor/carpet the firm has laid). */
+    --rv-postcard-bg: url("https://res.cloudinary.com/ddmslr9na/image/upload/v1788904517/white-city-high-end-carpet_g6394e.webp");
+}
+
+/* ---------- Page shell ---------- */
+.reviews-page,
+.review-form-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3.5rem;
+}
+
+.reviews-page__head {
+    text-align: center;
+    margin-bottom: 2.25rem;
+}
+.reviews-page__head h1 {
+    margin: 0 0 0.5rem;
+    font-size: 2rem;
+    color: var(--rv-wood-dark);
+}
+.reviews-page__head p {
+    margin: 0 0 1.25rem;
+    color: #5b5b5b;
+}
+.reviews-page__empty {
+    text-align: center;
+    color: #5b5b5b;
+    padding: 2rem 0;
+}
+
+/* ---------- Postcard grid ---------- */
+.postcard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.75rem;
+}
+.postcard-grid--single {
+    max-width: 380px;
+    margin: 1.5rem auto 2rem;
+}
+
+/* ---------- Postcard ---------- */
+.postcard {
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 26px rgba(60, 40, 25, 0.18);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.postcard:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 34px rgba(60, 40, 25, 0.26);
+}
+
+.postcard__photo {
+    aspect-ratio: 4 / 3;
+    background: #e9e0d6;
+    overflow: hidden;
+}
+.postcard__photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Flooring-texture backing + white writing.
+   A dark scrim sits over the photo so the text stays legible; swap
+   --rv-postcard-bg for a different client's flooring image. */
+.postcard__body {
+    position: relative;
+    flex: 1;
+    padding: 1.25rem 1.25rem 1.4rem;
+    color: #fff;
+    background-color: var(--rv-wood-dark);
+    background-image:
+        linear-gradient(rgba(38, 24, 15, 0.62), rgba(38, 24, 15, 0.72)),
+        var(--rv-postcard-bg);
+    background-size: cover;
+    background-position: center;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+.postcard__stamp {
+    margin-bottom: 0.5rem;
+}
+.postcard__headline {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+    line-height: 1.3;
+}
+.postcard__text {
+    margin: 0 0 0.9rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #fdf6ee;
+}
+.postcard__meta {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #f0e4d6;
+    font-style: italic;
+}
+
+.postcard__actions {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+.postcard__action {
+    font-size: 0.85rem;
+    color: #fff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.postcard__action--danger { color: #ffd9d0; }
+
+/* ---------- Stars ---------- */
+.stars { letter-spacing: 2px; font-size: 1.05rem; }
+.stars__star { color: rgba(255, 255, 255, 0.45); }
+.stars__star--on { color: var(--rv-gold); }
+
+/* ---------- Buttons ---------- */
+.btn {
+    display: inline-block;
+    padding: 0.6rem 1.2rem;
+    border-radius: 7px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.btn--primary {
+    background: #8b4b07;
+    color: #fff;
+    border-color: #8b4b07;
+}
+.btn--primary:hover { background: #733d05; }
+.btn--ghost {
+    background: transparent;
+    color: var(--rv-wood-dark);
+    border-color: var(--rv-wood-mid);
+}
+.btn--ghost:hover { background: rgba(111, 74, 48, 0.08); }
+.btn--danger {
+    background: #a4291f;
+    color: #fff;
+    border-color: #a4291f;
+}
+.btn--danger:hover { background: #871f17; }
+
+/* ---------- Review form ---------- */
+.review-form-wrap h1 {
+    color: var(--rv-wood-dark);
+    margin-bottom: 0.35rem;
+}
+.review-form-wrap__note {
+    color: #5b5b5b;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+}
+.review-form {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 12px;
+    padding: 1.75rem;
+    box-shadow: 0 8px 22px rgba(60, 40, 25, 0.12);
+}
+.review-form__field {
+    margin-bottom: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.review-form__field label {
+    font-weight: 600;
+    color: var(--rv-ink);
+}
+.review-form__field input[type="text"],
+.review-form__field input[type="file"],
+.review-form__field select,
+.review-form__field textarea {
+    font: inherit;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid #c7bdb1;
+    border-radius: 6px;
+    background: #fdfbf9;
+    width: 100%;
+}
+.review-form__field textarea { resize: vertical; }
+.review-form__field--invalid input,
+.review-form__field--invalid select,
+.review-form__field--invalid textarea {
+    border-color: #a4291f;
+}
+.review-form__help { font-size: 0.83rem; color: #6b6b6b; }
+.review-form__error { font-size: 0.83rem; color: #a4291f; }
+.review-form__errors {
+    background: #fbe6e6;
+    border: 1px solid #e0b1b1;
+    color: #8a1f1f;
+    border-radius: 6px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1rem;
+}
+.review-form__current {
+    font-size: 0.88rem;
+    color: #6b6b6b;
+    margin: -0.4rem 0 1rem;
+}
+.review-form__buttons {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+@media (max-width: 520px) {
+    .review-form { padding: 1.25rem; }
+    .review-form__buttons { flex-direction: column; align-items: stretch; }
+    .review-form__buttons .btn { text-align: center; }
+}

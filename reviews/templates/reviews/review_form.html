@@ -1,0 +1,52 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | {% if is_edit %}Edit your review{% else %}Post a review{% endif %}{% endblock %}
+
+{% block body_class %}page-reviews{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'reviews/css/reviews.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="review-form-wrap">
+    <h1>{% if is_edit %}Edit your review{% else %}Post a review{% endif %}</h1>
+    <p class="review-form-wrap__note">
+        Every review is checked before it appears on the site. Editing a review
+        sends it back for approval.
+    </p>
+
+    <form class="review-form" method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="review-form__errors">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        {% for field in form %}
+            <div class="review-form__field{% if field.errors %} review-form__field--invalid{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}
+                    <span class="review-form__help">{{ field.help_text }}</span>
+                {% endif %}
+                {% for error in field.errors %}
+                    <span class="review-form__error">{{ error }}</span>
+                {% endfor %}
+            </div>
+        {% endfor %}
+
+        {% if is_edit and review.image %}
+            <p class="review-form__current">A photo is already attached. Upload a new one to replace it.</p>
+        {% endif %}
+
+        <div class="review-form__buttons">
+            <button type="submit" class="btn btn--primary">
+                {% if is_edit %}Save changes{% else %}Submit review{% endif %}
+            </button>
+            <a class="btn btn--ghost" href="{% url 'reviews:list' %}">Cancel</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

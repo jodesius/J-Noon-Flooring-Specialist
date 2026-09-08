@@ -1,0 +1,38 @@
+{% comment %}
+One review "postcard". Usage:
+    {% include "reviews/_postcard.html" with review=review %}
+The card front carries the photo; the body has a wood-plank backing with
+white text. The wood backing is CSS only (see reviews.css) so it can be
+re-skinned or swapped for a texture image per client.
+{% endcomment %}
+<article class="postcard">
+    <div class="postcard__photo">
+        <img src="{{ review.image_url }}" alt="Work by J-Noon Flooring Specialist" loading="lazy">
+    </div>
+
+    <div class="postcard__body">
+        <div class="postcard__stamp">
+            {% include "reviews/_stars.html" with rating=review.rating %}
+        </div>
+
+        <h3 class="postcard__headline">{{ review.headline }}</h3>
+        <p class="postcard__text">{{ review.body|linebreaksbr }}</p>
+
+        <p class="postcard__meta">
+            &mdash; {{ review.author.get_username }},
+            <time datetime="{{ review.created_at|date:'c' }}">{{ review.created_at|date:'j M Y' }}</time>
+        </p>
+
+        {% if user.is_authenticated %}
+            {% if review.author_id == user.id or user.is_site_admin %}
+                <div class="postcard__actions">
+                    {% if review.author_id == user.id %}
+                        <a class="postcard__action" href="{% url 'reviews:update' slug=review.slug %}">Edit</a>
+                    {% endif %}
+                    <a class="postcard__action postcard__action--danger"
+                       href="{% url 'reviews:delete' slug=review.slug %}">Delete</a>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+</article>

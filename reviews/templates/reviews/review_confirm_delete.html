@@ -1,0 +1,27 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Delete review{% endblock %}
+
+{% block body_class %}page-reviews{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'reviews/css/reviews.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="review-form-wrap">
+    <h1>Delete this review?</h1>
+    <p class="review-form-wrap__note">This cannot be undone.</p>
+
+    <div class="postcard-grid postcard-grid--single">
+        {% include "reviews/_postcard.html" with review=review %}
+    </div>
+
+    <form method="post" class="review-form__buttons">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--danger">Yes, delete it</button>
+        <a class="btn btn--ghost" href="{% url 'reviews:list' %}">Keep it</a>
+    </form>
+</section>
+{% endblock %}

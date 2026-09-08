@@ -26,6 +26,7 @@ media/
 !.vscode/settings.json
 !.vscode/extensions.json
 .idea/
+.claude/
 
 # OS files
 .DS_Store

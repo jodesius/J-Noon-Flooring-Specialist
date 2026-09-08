@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "gallery",
     "bookings",
     "accounts",
+    "reviews",
 ]
 
 MIDDLEWARE = [

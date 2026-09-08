@@ -1,0 +1,12 @@
+{% comment %}
+Star rating display. Usage: {% include "reviews/_stars.html" with rating=review.rating %}
+{% endcomment %}
+<span class="stars" role="img" aria-label="{{ rating }} out of 5 stars">
+    {% for n in "12345"|make_list %}
+        {% if forloop.counter <= rating %}
+            <span class="stars__star stars__star--on" aria-hidden="true">&#9733;</span>
+        {% else %}
+            <span class="stars__star" aria-hidden="true">&#9734;</span>
+        {% endif %}
+    {% endfor %}
+</span>

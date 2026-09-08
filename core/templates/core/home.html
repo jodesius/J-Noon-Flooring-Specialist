@@ -6,12 +6,75 @@
 {% block body_class %}page-home{% endblock %}
 
 {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'reviews/css/reviews.css' %}">
     <link rel="stylesheet" href="{% static 'core/css/home.css' %}">
 {% endblock %}
 
 {% block content %}
-    <h1>Home</h1>
-    <p>This is the home page.</p>
+
+{# ---------- Hero ---------- #}
+<section class="hero">
+    <img class="hero__img"
+         src="https://res.cloudinary.com/ddmslr9na/image/upload/v1788902700/byron-road-livingroom_byfj7r.webp"
+         alt="Freshly installed flooring by J-Noon Flooring Specialist">
+    <div class="hero__overlay">
+        <div class="hero__inner">
+            <p class="hero__eyebrow">Chelmsford, Essex</p>
+            <h1 class="hero__title">Flooring fitted to last</h1>
+            <p class="hero__lead">
+                Laminate, LVT, Amtico and Carpet specialists with 15+ years on the tools.
+            </p>
+            <div class="hero__actions">
+                <a class="btn btn--primary" href="{% url 'bookings:index' %}">Book a visit</a>
+                <a class="btn btn--ghost btn--on-dark" href="{% url 'gallery:index' %}">See our work</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ---------- About ---------- #}
+<section class="about">
+    <div class="about__inner">
+        <h2 class="about__heading">About J-Noon Flooring Specialist</h2>
+        <p class="about__text">
+            I've been installing flooring for over 15 years and I'm based in
+            Chelmsford. I specialise in laminate, LVT and Amtico installations, i also install other systems
+            such as: solid and engineered wood, vinyl, carpet and carpet tiles, along with subfloor
+            preparation and screeding. I cover a 25&#8209;mile radius of the
+            Chelmsford area, so if you're anywhere nearby, feel free to get in touch for a free quote.
+        </p>
+    </div>
+</section>
+
+{# ---------- Reviews ---------- #}
+<section class="home-reviews">
+    <div class="home-reviews__inner">
+        <div class="home-reviews__head">
+            <h2>Reviews</h2>
+            <p>Postcards from clients &mdash; their photos, their words.</p>
+        </div>
+
+        {% if reviews %}
+            <div class="postcard-grid">
+                {% for review in reviews %}
+                    {% include "reviews/_postcard.html" with review=review %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="home-reviews__empty">
+                No reviews published yet &mdash; be the first to leave one.
+            </p>
+        {% endif %}
+
+        <div class="home-reviews__foot">
+            <a class="btn btn--primary" href="{% url 'reviews:list' %}">See all reviews</a>
+            {% if user.is_authenticated %}
+                <a class="btn btn--ghost" href="{% url 'reviews:create' %}">Post your review</a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
 {% endblock %}
 
 {% block extra_js %}

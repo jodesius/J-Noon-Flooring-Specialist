@@ -32,11 +32,14 @@ firms with only branding, content and configuration changes.
 
 A multi-page Django site with:
 
-- Public pages (home, work gallery, bookings — currently placeholders being
-  built out).
+- A built-out **home page** (hero, about, and a live "Reviews" strip) plus
+  work-gallery and bookings pages (still placeholders being built out).
+- A **client reviews** feature: signed-in customers post postcard-style
+  reviews with a star rating and an optional photo; every review is
+  moderated before it appears.
 - A full customer account system: registration, login, logout, password
   reset by email, and an editable user profile with avatar upload.
-- The Django admin for staff.
+- The Django admin for staff, including the review moderation queue.
 
 Customer data is held in a managed PostgreSQL database (Neon). All
 configuration and secrets are supplied through environment variables — no
@@ -74,8 +77,36 @@ Dependencies are pinned in `requirements.txt`.
 - When signed in, the header avatar + name is a link straight to the
   profile page.
 - Per-page CSS and JS, namespaced by app.
+- **Home page** (`core`): full-bleed hero with call-to-action buttons (hero
+  image is a placeholder pending a real asset), an "About" section, and a
+  "Reviews" strip showing the six most recent approved review postcards with
+  a *See all reviews* link.
 - `gallery` and `bookings` are wired routes with placeholder content,
   ready to be built out.
+
+### Client reviews (`reviews`)
+
+| Route | Purpose |
+| --- | --- |
+| `/reviews/` | Public page — every approved review postcard |
+| `/reviews/new/` | Post a review (`@login_required`) |
+| `/reviews/<uuid>/edit/` | Edit your own review (`@login_required`) |
+| `/reviews/<uuid>/delete/` | Delete a review — author, Site Admin or superuser |
+
+- Signed-in customers post **postcard-style reviews**: a 1–5 **star rating**
+  (required), a headline, the review text, and an **optional photo** of the
+  finished work. When no photo is uploaded a default image is shown.
+- **Moderated**: a new or edited review is `is_approved = False` and hidden
+  from the site until an admin approves it in `/admin/`. The submitter sees
+  a "will appear once it has been approved" message. Editing a review sends
+  it back to the queue.
+- The author can **edit and delete** their own reviews. **Site
+  Administrators and the superuser can delete any** review (in the site UI
+  and in `/admin/`); the admin list has one-click approve/unapprove plus
+  bulk actions.
+- Postcards have a wood-plank "backing" with white text — pure CSS, so it
+  re-skins with the palette (or can be swapped for a texture image).
+- Review URLs use the review's **UUID slug**, never a sequential id.
 
 ### Accounts (`accounts`)
 
@@ -122,6 +153,10 @@ Three access tiers, using Django's built-in auth:
 - The Django admin is at `/admin/`, with the custom user and an inline
   profile editor. Verified status and account flags are editable there
   (and `email_verified` is a one-click toggle on the user list).
+- **Review moderation** lives in the admin: `is_approved` is a one-click
+  toggle on the review list, with bulk *Approve* / *Unapprove* actions.
+  Reviews cannot be created in the admin (clients post them through the
+  site).
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
   every permission for the project's own apps and **none** for Django's
@@ -202,6 +237,11 @@ today, grouped by concern:
   URL, form field, or hidden input — so one account cannot view or modify
   another (no IDOR / horizontal privilege escalation).
 - Profiles are private: there are no public profile pages.
+- **Reviews** are addressed by a random **UUID slug**, never a sequential
+  id. Editing is scoped to `author=request.user` (a stranger's slug 404s);
+  deleting is allowed only for the author, a Site Administrator, or the
+  superuser. The review form never accepts an author or id from the request
+  — it is set from `request.user` in the view.
 - **Vertical privilege escalation** is blocked in the admin: the Site
   Administrators group holds no `auth`-app permissions, and non-superusers
   never see `is_superuser` / `groups` / `user_permissions` and cannot act
@@ -223,21 +263,23 @@ today, grouped by concern:
 - Request body size is capped (`DATA_UPLOAD_MAX_MEMORY_SIZE`,
   `FILE_UPLOAD_MAX_MEMORY_SIZE`).
 
-### File uploads (profile images)
+### File uploads (profile images, review photos)
 
 - **Type is verified by parsing the file with Pillow**, not by trusting the
-  file extension or the browser-supplied content type. Only real PNG and
-  JPEG images are accepted; a renamed `.png`, a BMP, a GIF, or a text file
-  are all rejected.
-- Hard **1 MB size limit**, checked before the file is parsed.
-- Stored under a random UUID name (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`),
-  so the path exposes no user identifier and images cannot be enumerated.
-  Uploads go to Cloudinary (served from its CDN); the local `media/` folder
-  is the fallback when Cloudinary is not configured.
-- Replacing the picture just means uploading a new one — there is no
-  "delete" control on the form.
-- Client-side pre-check and live preview for fast feedback; the server-side
-  validation is always authoritative.
+  file extension or the browser-supplied content type. Profile images accept
+  real PNG / JPEG only; review photos accept real JPEG / PNG / WebP only. A
+  renamed `.png`, a BMP, a GIF, or a text file are all rejected.
+- Hard size limit checked **before** the file is parsed: **1 MB** for
+  profile images, **4 MB** for review photos.
+- Stored under a random UUID name (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`
+  or `<CLOUDINARY_FOLDER>/reviews/<uuid>`), so the path exposes no user
+  identifier and images cannot be enumerated. Uploads go to Cloudinary
+  (served from its CDN); the local `media/` folder is the fallback when
+  Cloudinary is not configured.
+- Replacing an image just means uploading a new one — there is no "delete"
+  control on either form.
+- Profile images have a client-side pre-check and live preview for fast
+  feedback; the server-side validation is always authoritative.
 
 ### Transport and headers
 
@@ -276,7 +318,8 @@ J-Flooring-Specialist/
 │   └── urls.py
 ├── core/                   # shared base template, home page, site chrome
 │   ├── templates/core/     # base.html, _avatar.html, home.html
-│   └── static/core/        # base.css / base.js, home.css / home.js
+│   ├── static/core/        # base.css / base.js, home.css / home.js
+│   └── views.py            # home view (feeds the recent-reviews strip)
 ├── accounts/               # user model, auth, profiles, roles
 │   ├── models.py           # User, Profile
 │   ├── backends.py         # username-or-email authentication
@@ -290,6 +333,16 @@ J-Flooring-Specialist/
 │   ├── migrations/
 │   ├── templates/accounts/ # login, register, logout, profile, reset + verify
 │   └── static/accounts/    # auth.css, profile.css, page JS
+├── reviews/                # client review postcards
+│   ├── models.py           # Review (UUID slug, rating, moderation flag)
+│   ├── forms.py            # ReviewForm
+│   ├── validators.py       # review-photo validation (Pillow, 4 MB)
+│   ├── admin.py            # moderation queue (approve / unapprove)
+│   ├── views.py            # list / create / update / delete
+│   ├── tests.py            # listing, moderation, IDOR + delete-permission
+│   ├── migrations/
+│   ├── templates/reviews/  # list, form, delete confirm, _postcard, _stars
+│   └── static/reviews/     # reviews.css
 ├── gallery/                # work gallery (placeholder route)
 ├── bookings/               # bookings (placeholder route)
 ├── manage.py
@@ -454,14 +507,23 @@ from its CDN.
 ## Running the test suite
 
 ```bash
-python manage.py test
+python manage.py test          # whole suite
+python manage.py test reviews   # just the reviews app
 ```
 
-Automated test coverage is being built out (see [Roadmap](#roadmap)). Every
-feature added so far has been manually verified end-to-end — registration,
-login (by username and by email), logout, the password-reset flow including
-real SMTP delivery, and the profile / avatar-upload flow — along with all of
-the security behaviours described above.
+The **`reviews` app has an automated test suite** covering the approved-only
+listing, the moderation reset on create/edit, the IDOR guard on editing, and
+the delete-permission matrix (author / stranger / Site Admin / superuser).
+Wider automated coverage is still being built out (see
+[Roadmap](#roadmap)). Every other feature added so far has been manually
+verified end-to-end — registration, login (by username and by email),
+logout, the password-reset flow including real SMTP delivery, and the
+profile / avatar-upload flow — along with all of the security behaviours
+described above.
+
+> The test runner creates a temporary `test_` database. Against Neon this
+> can need a moment between runs while the previous connection closes; add
+> `--keepdb` to reuse the test database.
 
 Also run, before any deploy:
 
@@ -508,6 +570,11 @@ shared code.
 
 ## Roadmap
 
+- [ ] Replace the two image placeholders with real assets: the home hero
+      image (`core/templates/core/home.html`) and the default review photo
+      (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`)
+- [x] Home page — hero, about, recent-reviews strip
+- [x] Client reviews (postcards, star rating, photo upload, moderation)
 - [ ] Build out the work gallery (upload, categories, lightbox)
 - [ ] Bookings: real enquiry form, availability, confirmation emails
 - [ ] Contact / quote request pages
