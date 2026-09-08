@@ -2,6 +2,42 @@ import re
 
 from django.core.exceptions import ValidationError
 
+PROFILE_IMAGE_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
+PROFILE_IMAGE_FORMATS = {"PNG", "JPEG"}
+
+
+def validate_profile_image(image):
+    """Profile image rules:
+
+    * 1 MB maximum
+    * must genuinely be a PNG or JPEG - the file contents are parsed with
+      Pillow, not trusted from the file extension
+    """
+    if image.size > PROFILE_IMAGE_MAX_BYTES:
+        raise ValidationError(
+            "Please use the correct format and keep the file size under 1MB."
+        )
+
+    # Import here so the rest of the module doesn't need Pillow.
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        img = Image.open(image)
+        image_format = img.format
+        img.verify()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise ValidationError(
+            "Please use the correct format and keep the file size under 1MB."
+        )
+    finally:
+        if hasattr(image, "seek"):
+            image.seek(0)
+
+    if image_format not in PROFILE_IMAGE_FORMATS:
+        raise ValidationError(
+            "Please use the correct format and keep the file size under 1MB."
+        )
+
 
 class SixToTwelvePasswordValidator:
     """Password policy for this project:

@@ -148,30 +148,52 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 
+# Media files (user uploads, e.g. profile images)
+# https://docs.djangoproject.com/en/6.1/topics/files/
+
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Reject anything bigger than ~2 MB before it reaches a view; the profile
+# image validator enforces the real 1 MB limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+
+
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 #
-# When Gmail credentials are present in the environment we send for real via
-# Gmail SMTP; otherwise emails are printed to the runserver console.
+# Provider-agnostic SMTP. Set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD in the
+# environment and email is sent for real; leave them blank and email is
+# printed to the runserver console instead.
+#
+# Defaults target Gmail (smtp.gmail.com:587, STARTTLS). Override EMAIL_HOST /
+# EMAIL_PORT / EMAIL_USE_SSL for another provider, e.g. Brevo:
+#   EMAIL_HOST=smtp-relay.brevo.com
+#   EMAIL_PORT=587
 
-_gmail_user = os.environ.get("EMAIL_HOST_USER", "")
-_gmail_password = os.environ.get("EMAIL_HOST_PASSWORD", "")
+_email_host = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+_email_port = int(os.environ.get("EMAIL_PORT", "587"))
+_email_user = os.environ.get("EMAIL_HOST_USER", "")
+_email_password = os.environ.get("EMAIL_HOST_PASSWORD", "")
+_email_use_ssl = os.environ.get("EMAIL_USE_SSL", "").strip().lower() in {"1", "true", "yes"}
 
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL",
     "J-Noon Flooring Specialist <no-reply@jnoonflooring.co.uk>",
 )
 
-if _gmail_user and _gmail_password:
+if _email_user and _email_password:
     MAILERS = {
         "default": {
             "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
             "OPTIONS": {
-                "host": "smtp.gmail.com",
-                "port": 587,
-                "username": _gmail_user,
-                "password": _gmail_password,
-                "use_tls": True,
+                "host": _email_host,
+                "port": _email_port,
+                "username": _email_user,
+                "password": _email_password,
+                "use_tls": not _email_use_ssl,
+                "use_ssl": _email_use_ssl,
             },
         },
     }

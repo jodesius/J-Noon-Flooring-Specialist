@@ -52,17 +52,23 @@
         </div>
 
         <div class="header-col header-col--right">
-            <div class="user-badge">
-                <svg class="user-badge__avatar" viewBox="0 0 64 64" role="img"
-                     aria-label="Profile picture">
-                    <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
-                    <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
-                    <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
-                </svg>
-                <span class="user-badge__name">
-                    {% if user.is_authenticated %}{{ user.get_username }}{% else %}Not logged in{% endif %}
-                </span>
-            </div>
+            {% if user.is_authenticated %}
+                <div class="user-menu">
+                    <button type="button" class="user-badge user-badge--button"
+                            aria-haspopup="true" aria-expanded="false">
+                        {% include "core/_avatar.html" %}
+                        <span class="user-badge__name">{{ user.get_username }}</span>
+                    </button>
+                    <div class="user-menu__panel">
+                        <a class="user-menu__link" href="{% url 'accounts:profile' %}">Edit profile</a>
+                    </div>
+                </div>
+            {% else %}
+                <div class="user-badge">
+                    {% include "core/_avatar.html" %}
+                    <span class="user-badge__name">Not logged in</span>
+                </div>
+            {% endif %}
         </div>
     </header>
 

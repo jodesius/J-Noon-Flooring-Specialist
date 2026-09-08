@@ -1,9 +1,11 @@
 from django.contrib import messages
 from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from .forms import LoginForm, RegisterForm
+from .forms import LoginForm, ProfileForm, RegisterForm
+from .models import Profile
 
 
 def register_view(request):
@@ -48,3 +50,31 @@ def logout_view(request):
         return redirect("core:home")
 
     return render(request, "accounts/logout.html")
+
+
+@login_required
+def profile_view(request):
+    # Always the logged-in user's own profile - never looked up by id.
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+
+    if request.method == "POST":
+        form = ProfileForm(request.POST, request.FILES, instance=profile)
+        if form.is_valid():
+            image_changed = "image" in form.changed_data
+            form.save()
+            if image_changed and profile.image:
+                messages.success(request, "Upload complete.")
+            else:
+                messages.success(request, "Profile saved.")
+            return redirect("accounts:profile")
+
+        if form.errors.get("image"):
+            messages.error(
+                request,
+                "Upload error - please use a PNG or JPEG and keep the file "
+                "size under 1MB.",
+            )
+    else:
+        form = ProfileForm(instance=profile)
+
+    return render(request, "accounts/profile.html", {"form": form, "profile": profile})

@@ -2,6 +2,9 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.validators import UnicodeUsernameValidator
+
+from .models import Profile
 
 User = get_user_model()
 
@@ -77,3 +80,57 @@ class LoginForm(AuthenticationForm):
             attrs={"autofocus": True, "autocomplete": "username"}
         ),
     )
+
+
+class ProfileForm(forms.ModelForm):
+    """The user's own profile. Always bound to request.user - no identifier
+    is ever taken from the request.
+    """
+
+    username = forms.CharField(
+        label="Username",
+        max_length=150,
+        validators=[UnicodeUsernameValidator()],
+        help_text="Letters, digits and @ . + - _ only.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "image",
+            "pronouns",
+            "phone",
+            "contact_email",
+            "about",
+            "facebook",
+            "instagram",
+            "linkedin",
+            "website",
+        ]
+        widgets = {
+            "about": forms.Textarea(attrs={"rows": 5}),
+            "pronouns": forms.TextInput(attrs={"placeholder": "e.g. she/her"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].initial = self.instance.user.username
+
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        clash = (
+            User.objects.filter(username__iexact=username)
+            .exclude(pk=self.instance.user_id)
+            .exists()
+        )
+        if clash:
+            raise forms.ValidationError("That username is already taken.")
+        return username
+
+    def save(self, commit=True):
+        profile = super().save(commit=False)
+        profile.user.username = self.cleaned_data["username"]
+        if commit:
+            profile.user.save(update_fields=["username"])
+            profile.save()
+        return profile

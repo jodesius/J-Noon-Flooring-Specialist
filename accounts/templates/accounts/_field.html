@@ -1,0 +1,14 @@
+{% comment %}
+Renders one form field with label, help text and errors.
+Usage:  {% include "accounts/_field.html" with field=form.pronouns %}
+{% endcomment %}
+<div class="auth__field{% if field.errors %} auth__field--invalid{% endif %}">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {{ field }}
+    {% if field.help_text %}
+        <span class="auth__help">{{ field.help_text }}</span>
+    {% endif %}
+    {% for error in field.errors %}
+        <span class="auth__error">{{ error }}</span>
+    {% endfor %}
+</div>

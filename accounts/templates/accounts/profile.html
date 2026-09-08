@@ -1,0 +1,77 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Edit profile{% endblock %}
+
+{% block body_class %}page-profile{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
+    <link rel="stylesheet" href="{% static 'accounts/css/profile.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="profile">
+    <h1>Edit profile</h1>
+
+    <form class="auth__form profile__form" method="post"
+          enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <ul class="auth__errors">
+                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+            </ul>
+        {% endif %}
+
+        <div class="profile__avatar-row">
+            <span class="profile__avatar">
+                {% if profile.image %}
+                    <img src="{{ profile.image.url }}" alt="Your current profile image">
+                {% else %}
+                    <svg viewBox="0 0 64 64" aria-hidden="true">
+                        <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
+                        <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
+                        <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
+                    </svg>
+                {% endif %}
+            </span>
+
+            <div class="auth__field{% if form.image.errors %} auth__field--invalid{% endif %}">
+                <label for="{{ form.image.id_for_label }}">Profile image</label>
+                {{ form.image }}
+                <span class="auth__help">PNG or JPEG, under 1MB. It replaces the
+                    default icon next to your name in the header.</span>
+                <span class="profile__feedback" data-image-feedback hidden></span>
+                {% for error in form.image.errors %}
+                    <span class="auth__error">{{ error }}</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% include "accounts/_field.html" with field=form.username %}
+        {% include "accounts/_field.html" with field=form.pronouns %}
+        {% include "accounts/_field.html" with field=form.about %}
+
+        <fieldset class="profile__group">
+            <legend>Contact</legend>
+            {% include "accounts/_field.html" with field=form.phone %}
+            {% include "accounts/_field.html" with field=form.contact_email %}
+        </fieldset>
+
+        <fieldset class="profile__group">
+            <legend>Social links</legend>
+            {% include "accounts/_field.html" with field=form.facebook %}
+            {% include "accounts/_field.html" with field=form.instagram %}
+            {% include "accounts/_field.html" with field=form.linkedin %}
+            {% include "accounts/_field.html" with field=form.website %}
+        </fieldset>
+
+        <button type="submit" class="auth__submit">Save profile</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'accounts/js/profile.js' %}" defer></script>
+{% endblock %}
