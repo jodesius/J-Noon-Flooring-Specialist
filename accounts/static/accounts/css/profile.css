@@ -13,7 +13,57 @@
 .profile h1 {
     color: #ffffff;
     text-align: center;
+    margin: 0 0 1rem;
+}
+
+.profile__account {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
     margin: 0 0 1.5rem;
+    color: #f0e4d8;
+    font-size: 0.9rem;
+}
+
+.profile__email {
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.profile__account form {
+    margin: 0;
+}
+
+.profile__verify-btn {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: #ffffff;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.badge--verified {
+    background: #e3f4e4;
+    color: #1f7a34;
+}
+
+.badge--unverified {
+    background: #f6e4d6;
+    color: #8a4a1e;
 }
 
 .profile__avatar-row {
@@ -73,6 +123,17 @@
     padding: 0 0.4rem;
 }
 
+.profile__readonly {
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+    background: #f2f2f2;
+    color: #555;
+    font-size: 1rem;
+    word-break: break-all;
+}
+
 .profile__form textarea {
     width: 100%;
     padding: 0.6rem 0.7rem;
@@ -86,4 +147,63 @@
     outline: 3px solid #c8a27c;
     outline-offset: 1px;
     border-color: #8a8a8a;
+}
+
+/* ---------- Read-only view ---------- */
+.profile__view-name {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    align-self: center;
+}
+
+.profile__facts {
+    margin: 0;
+}
+
+.profile__facts dt {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6a6a6a;
+    margin-top: 1rem;
+}
+
+.profile__facts dt:first-of-type {
+    margin-top: 0;
+}
+
+.profile__facts dd {
+    margin: 0.2rem 0 0;
+    word-break: break-word;
+}
+
+.profile__facts dd a {
+    color: #7c4416;
+}
+
+.profile__not-set {
+    color: #999;
+    font-style: italic;
+}
+
+/* ---------- Action buttons (both modes) ---------- */
+.profile__actions {
+    margin-top: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+a.auth__submit {
+    display: inline-block;
+    text-decoration: none;
+    text-align: center;
+}
+
+.profile__cancel {
+    color: #f0e4d8;
+    text-decoration: underline;
 }

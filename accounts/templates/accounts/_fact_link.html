@@ -1,0 +1,7 @@
+{% comment %}Read-only display of one URL profile field.
+   Usage: {% include "accounts/_fact_link.html" with value=profile.facebook %}{% endcomment %}
+{% if value %}
+    <a href="{{ value }}" target="_blank" rel="noopener noreferrer nofollow">{{ value }}</a>
+{% else %}
+    <span class="profile__not-set">Not set</span>
+{% endif %}

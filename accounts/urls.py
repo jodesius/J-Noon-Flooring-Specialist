@@ -11,6 +11,14 @@ urlpatterns = [
     path("logout/", views.logout_view, name="logout"),
     path("profile/", views.profile_view, name="profile"),
 
+    # --- Email verification ---
+    path("verify-email/", views.send_verification_email, name="send_verification"),
+    path(
+        "verify-email/<uidb64>/<token>/",
+        views.verify_email,
+        name="verify_email",
+    ),
+
     # --- Password reset (Django's built-in flow, custom templates) ---
     path(
         "password-reset/",

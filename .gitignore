@@ -21,7 +21,10 @@ media/
 !.env.example
 
 # IDE / Editor
-.vscode/
+# Keep the shared workspace settings + extension recommendations; ignore the rest.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 
 # OS files

@@ -149,49 +149,21 @@ body {
     white-space: nowrap;
 }
 
-.user-badge--button {
-    background: none;
-    border: 0;
-    padding: 0;
-    font: inherit;
-    cursor: pointer;
-}
-
-.user-menu {
-    position: relative;
-}
-
-.user-menu__panel {
-    display: none;
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    min-width: 170px;
-    padding: 0.35rem;
-    background: var(--wood-panel);
-    border: 1px solid var(--wood-accent);
-    border-radius: 8px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-    z-index: 100;
-}
-
-.user-menu:hover .user-menu__panel,
-.user-menu:focus-within .user-menu__panel,
-.user-menu.is-open .user-menu__panel {
-    display: block;
-}
-
-.user-menu__link {
-    display: block;
-    padding: 0.6rem 0.75rem;
-    border-radius: 5px;
-    color: var(--text-on-wood);
+/* The badge is a link straight to the profile page. */
+.user-badge--link {
     text-decoration: none;
-    font-size: 0.95rem;
-    white-space: nowrap;
+    color: inherit;
+    padding: 0.3rem 0.5rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
 }
-.user-menu__link:hover {
-    background: rgba(255, 255, 255, 0.10);
+.user-badge--link:hover,
+.user-badge--link:focus-visible {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+.user-badge--link:hover .user-badge__name {
+    color: var(--text-on-wood);
+    text-decoration: underline;
 }
 
 /* ---------- Flash messages ---------- */

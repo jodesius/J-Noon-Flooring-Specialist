@@ -15,6 +15,7 @@ class User(AbstractUser):
     """
 
     email = models.EmailField("email address", unique=True)
+    email_verified = models.BooleanField("email verified", default=False)
 
     # username stays the USERNAME_FIELD; email is also asked for by
     # `createsuperuser` because it is listed here.
@@ -22,6 +23,14 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+
+    @property
+    def is_site_admin(self):
+        """Superuser, or a member of the Site Administrators group."""
+        return (
+            self.is_superuser
+            or self.groups.filter(name="Site Administrators").exists()
+        )
 
 
 def profile_image_upload_to(instance, filename):

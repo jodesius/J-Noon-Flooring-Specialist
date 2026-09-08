@@ -43,6 +43,12 @@ class RegisterForm(forms.ModelForm):
             raise forms.ValidationError("An account with this email already exists.")
         return email
 
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip()
+        if username and User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("That username is already taken.")
+        return username
+
     def clean(self):
         cleaned = super().clean()
         password = cleaned.get("password")
@@ -110,6 +116,9 @@ class ProfileForm(forms.ModelForm):
         widgets = {
             "about": forms.Textarea(attrs={"rows": 5}),
             "pronouns": forms.TextInput(attrs={"placeholder": "e.g. she/her"}),
+            # Plain file input - no "Currently / Clear" checkbox. To change the
+            # picture the user just uploads a new one, which replaces the old.
+            "image": forms.FileInput(attrs={"accept": "image/png,image/jpeg"}),
         }
 
     def __init__(self, *args, **kwargs):

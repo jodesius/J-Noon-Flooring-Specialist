@@ -54,6 +54,7 @@ credentials live in the repository.
 | DB driver | psycopg 3 |
 | Config | `.env` via `python-dotenv` (`override=True`) + `dj-database-url` |
 | Images | Pillow (upload validation) |
+| Media storage | Cloudinary (`django-cloudinary-storage`); local `media/` folder when unconfigured |
 | Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step |
 
@@ -83,10 +84,17 @@ Dependencies are pinned in `requirements.txt`.
 | `/accounts/profile/` | Edit your own profile |
 | `/accounts/password-reset/` | Request a reset link by email |
 | `/accounts/reset/<uidb64>/<token>/` | Set a new password from an emailed link |
+| `/accounts/verify-email/<uidb64>/<token>/` | Confirm an email address from an emailed link |
 
 - **Custom user model** (`accounts.User`) with a unique, required email
-  address.
-- **Show / hide password** toggle on the registration form.
+  address. Usernames are unique **case-insensitively** — nobody can take
+  `Bob` if `bob` exists.
+- **Show / hide password** toggle on the registration, login and
+  set-new-password forms.
+- **Email verification**: a signed, time-limited link is sent at
+  registration (and re-sendable from the profile page). The profile shows a
+  **Verified / Unverified** badge. The link is token-only, so it works from
+  any device without logging in.
 - **Profile**: display name (username), profile image, pronouns, contact
   phone and email, an "about me" section, and social links
   (Facebook, Instagram, LinkedIn, website). One profile per user, created
@@ -94,10 +102,30 @@ Dependencies are pinned in `requirements.txt`.
 - The uploaded avatar replaces the default icon beside the username in the
   site header.
 
-### Admin
+### Admin & roles
 
-- Django admin at `/admin/` with the custom user and an inline profile
-  editor.
+Three access tiers, using Django's built-in auth:
+
+| Tier | How | Can do |
+| --- | --- | --- |
+| **Superuser** | `is_superuser` — **jodesius only** | Everything; the only tier that can grant superuser, edit raw permissions, or manage groups |
+| **Site Administrator** | `is_staff = True` + member of the **Site Administrators** group | Manage all project content and customer accounts in `/admin/` |
+| **Regular user** | default | No admin access at all |
+
+- The Django admin is at `/admin/`, with the custom user and an inline
+  profile editor. Verified status and account flags are editable there
+  (and `email_verified` is a one-click toggle on the user list).
+- The **Site Administrators** group is (re)built automatically after every
+  `migrate`, and manually with `python manage.py sync_roles`. It receives
+  every permission for the project's own apps and **none** for Django's
+  `auth` app, so members cannot create groups or edit permissions.
+- A non-superuser in `/admin/` never sees the `is_superuser`, `groups` or
+  `user_permissions` fields, and cannot view, edit or delete a superuser
+  account — no privilege escalation.
+- To promote someone: in the admin, tick **Staff status** and add them to
+  the **Site Administrators** group.
+- `user.is_site_admin` (superuser or group member) is available for
+  template / view checks.
 
 ---
 
@@ -128,6 +156,10 @@ today, grouped by concern:
   cookie is `HttpOnly` and `SameSite=Lax`.
 - Logout is **POST only** and CSRF-protected — it cannot be triggered by a
   link, image, or third-party page.
+- Email-verification and password-reset links use HMAC-signed, time-limited
+  tokens (`SECRET_KEY`-derived). A verification token's hash includes the
+  address and the verified flag, so it is single-use and dies if the email
+  changes.
 
 ### Passwords
 
@@ -163,6 +195,10 @@ today, grouped by concern:
   so one account cannot view or modify another (no IDOR / horizontal
   privilege escalation).
 - Profiles are private: there are no public profile pages.
+- **Vertical privilege escalation** is blocked in the admin: the Site
+  Administrators group holds no `auth`-app permissions, and non-superusers
+  never see `is_superuser` / `groups` / `user_permissions` and cannot act
+  on superuser accounts (see [Admin & roles](#admin--roles)).
 
 ### Input handling and injection
 
@@ -187,8 +223,12 @@ today, grouped by concern:
   JPEG images are accepted; a renamed `.png`, a BMP, a GIF, or a text file
   are all rejected.
 - Hard **1 MB size limit**, checked before the file is parsed.
-- Stored under a random UUID filename (`profile_images/<uuid>.png`), so the
-  media path exposes no user identifier and images cannot be enumerated.
+- Stored under a random UUID name (`profile_images/<uuid>`), so the path
+  exposes no user identifier and images cannot be enumerated. Uploads go to
+  Cloudinary (served from its CDN); the `media/` folder is the fallback when
+  Cloudinary is not configured.
+- Replacing the picture just means uploading a new one — there is no
+  "delete" control on the form.
 - Client-side pre-check and live preview for fast feedback; the server-side
   validation is always authoritative.
 
@@ -230,15 +270,18 @@ J-Flooring-Specialist/
 ├── core/                   # shared base template, home page, site chrome
 │   ├── templates/core/     # base.html, _avatar.html, home.html
 │   └── static/core/        # base.css / base.js, home.css / home.js
-├── accounts/               # user model, auth, profiles
+├── accounts/               # user model, auth, profiles, roles
 │   ├── models.py           # User, Profile
 │   ├── backends.py         # username-or-email authentication
 │   ├── validators.py       # password policy + profile-image validation
+│   ├── tokens.py           # email-verification token generator
+│   ├── roles.py            # Site Administrators group definition
 │   ├── forms.py            # RegisterForm, LoginForm, ProfileForm
 │   ├── signals.py          # auto-create Profile for new users
+│   ├── management/commands/ # sync_roles
 │   ├── views.py
 │   ├── migrations/
-│   ├── templates/accounts/ # login, register, logout, profile, reset flow
+│   ├── templates/accounts/ # login, register, logout, profile, reset + verify
 │   └── static/accounts/    # auth.css, profile.css, page JS
 ├── gallery/                # work gallery (placeholder route)
 ├── bookings/               # bookings (placeholder route)
@@ -248,8 +291,9 @@ J-Flooring-Specialist/
 └── README.md
 ```
 
-Uploaded files live in `media/` (git-ignored). Collected static files go to
-`staticfiles/` on deploy (git-ignored).
+Uploaded files go to Cloudinary (or the git-ignored `media/` folder when
+`CLOUDINARY_URL` is unset). Collected static files go to `staticfiles/` on
+deploy (git-ignored).
 
 ---
 
@@ -319,6 +363,8 @@ development. See `.env.example` for the template.
 | `EMAIL_HOST_USER` | No | SMTP login. For Gmail, the full address; for other providers, the login they give you. |
 | `EMAIL_HOST_PASSWORD` | No | SMTP password / key. For Gmail, a 16-char **App Password** (needs 2-Step Verification). |
 | `DEFAULT_FROM_EMAIL` | No | "From" address on outgoing email, e.g. `J-Noon Flooring Specialist <name@example.com>` (angle brackets required). |
+| `CLOUDINARY_URL` | No | `cloudinary://<key>:<secret>@<cloud_name>` from the Cloudinary dashboard (must include the `@<cloud_name>` part). If unset or malformed, uploads are stored in the local `media/` folder. |
+| `CLOUDINARY_FOLDER` | No | Folder inside the Cloudinary account that uploads go into. Default `media`. |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
 via SMTP; otherwise it is printed to the `runserver` console.
@@ -379,6 +425,25 @@ from a domain you own and authenticate (SPF, DKIM, DMARC) — see the roadmap.
 
 ---
 
+## Media storage
+
+User uploads (currently just profile images) go to **Cloudinary** when
+`CLOUDINARY_URL` is set, otherwise to the local `media/` folder.
+
+1. Create a free account at <https://cloudinary.com>.
+2. On the dashboard, copy the whole **API environment variable** —
+   `cloudinary://<api_key>:<api_secret>@<cloud_name>` (it must end with the
+   `@<cloud_name>`).
+3. Put it in `.env` as `CLOUDINARY_URL=...`, set `CLOUDINARY_FOLDER` to the
+   folder you want uploads in, and restart the server.
+
+No code change is needed to switch — `settings.STORAGES["default"]` picks the
+backend based on whether a valid `CLOUDINARY_URL` is present. Files keep
+their random UUID names inside `CLOUDINARY_FOLDER`; Cloudinary serves them
+from its CDN.
+
+---
+
 ## Running the test suite
 
 ```bash
@@ -402,13 +467,14 @@ python manage.py check --deploy
 ## Production deployment
 
 1. Set environment variables on the host: `DJANGO_SECRET_KEY` (a fresh one),
-   `DATABASE_URL`, and the email variables (`EMAIL_HOST`, `EMAIL_PORT`,
-   `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). No `.env`
-   file is deployed.
+   `DATABASE_URL`, `CLOUDINARY_URL`, and the email variables (`EMAIL_HOST`,
+   `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`,
+   `DEFAULT_FROM_EMAIL`). No `.env` file is deployed.
 2. Apply the [production hardening checklist](#production-hardening-checklist)
    in `settings.py` — gate the `SECURE_*` settings on `DEBUG` being `False`.
 3. `python manage.py collectstatic`
-4. `python manage.py migrate`
+4. `python manage.py migrate` (this also refreshes the Site Administrators
+   permission group; `python manage.py sync_roles` runs it on demand).
 5. Serve through a WSGI server (e.g. Gunicorn) behind HTTPS.
 6. Serve `/static/` and `/media/` from the host or a CDN/object store —
    Django only serves them in `DEBUG` mode.
@@ -445,7 +511,7 @@ shared code.
       domain (or another provider) is a `.env` change only.
 - [ ] Automated test suite (unit + integration) and CI
 - [ ] Production settings split and hardening
-- [ ] Media storage backend for uploads
+- [x] Media storage backend for uploads (Cloudinary; set `CLOUDINARY_URL`)
 - [ ] Cookie / privacy notice and GDPR data-export/delete tooling
 
 ---

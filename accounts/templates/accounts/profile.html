@@ -1,7 +1,8 @@
 {% extends "core/base.html" %}
 {% load static %}
 
-{% block title %}J-Noon Flooring Specialist | Edit profile{% endblock %}
+{% block title %}J-Noon Flooring Specialist |
+    {% if editing %}Edit profile{% else %}Your profile{% endif %}{% endblock %}
 
 {% block body_class %}page-profile{% endblock %}
 
@@ -12,63 +13,148 @@
 
 {% block content %}
 <div class="profile">
-    <h1>Edit profile</h1>
+    <h1>{% if editing %}Edit profile{% else %}Your profile{% endif %}</h1>
 
-    <form class="auth__form profile__form" method="post"
-          enctype="multipart/form-data" novalidate>
-        {% csrf_token %}
-
-        {% if form.non_field_errors %}
-            <ul class="auth__errors">
-                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-            </ul>
+    <div class="profile__account">
+        <span class="profile__email">{{ user.email }}</span>
+        {% if user.email_verified %}
+            <span class="badge badge--verified">Verified</span>
+        {% else %}
+            <span class="badge badge--unverified">Unverified</span>
+            <form method="post" action="{% url 'accounts:send_verification' %}">
+                {% csrf_token %}
+                <button type="submit" class="profile__verify-btn">Send verification email</button>
+            </form>
         {% endif %}
+    </div>
 
-        <div class="profile__avatar-row">
-            <span class="profile__avatar">
-                {% if profile.image %}
-                    <img src="{{ profile.image.url }}" alt="Your current profile image">
-                {% else %}
-                    <svg viewBox="0 0 64 64" aria-hidden="true">
-                        <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
-                        <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
-                        <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
-                    </svg>
-                {% endif %}
-            </span>
+    {% if editing %}
+        {# ---------------- Edit mode ---------------- #}
+        <form class="auth__form profile__form" method="post"
+              enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
 
-            <div class="auth__field{% if form.image.errors %} auth__field--invalid{% endif %}">
-                <label for="{{ form.image.id_for_label }}">Profile image</label>
-                {{ form.image }}
-                <span class="auth__help">PNG or JPEG, under 1MB. It replaces the
-                    default icon next to your name in the header.</span>
-                <span class="profile__feedback" data-image-feedback hidden></span>
-                {% for error in form.image.errors %}
-                    <span class="auth__error">{{ error }}</span>
-                {% endfor %}
+            {% if form.non_field_errors %}
+                <ul class="auth__errors">
+                    {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+
+            <div class="profile__avatar-row">
+                <span class="profile__avatar">
+                    {% if profile.image %}
+                        <img src="{{ profile.image.url }}" alt="Your current profile image">
+                    {% else %}
+                        <svg viewBox="0 0 64 64" aria-hidden="true">
+                            <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
+                            <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
+                            <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
+                        </svg>
+                    {% endif %}
+                </span>
+
+                <div class="auth__field{% if form.image.errors %} auth__field--invalid{% endif %}">
+                    <label for="{{ form.image.id_for_label }}">Profile image</label>
+                    {{ form.image }}
+                    <span class="auth__help">PNG or JPEG, under 1MB. It replaces the
+                        default icon next to your name in the header.</span>
+                    <span class="profile__feedback" data-image-feedback hidden></span>
+                    {% for error in form.image.errors %}
+                        <span class="auth__error">{{ error }}</span>
+                    {% endfor %}
+                </div>
             </div>
+
+            {% include "accounts/_field.html" with field=form.username %}
+
+            <div class="auth__field">
+                <label>Registered email</label>
+                <p class="profile__readonly">{{ user.email }}</p>
+                <span class="auth__help">Account and verification emails go here.
+                    This can't be changed on your profile.</span>
+            </div>
+
+            {% include "accounts/_field.html" with field=form.pronouns %}
+            {% include "accounts/_field.html" with field=form.about %}
+
+            <fieldset class="profile__group">
+                <legend>Contact</legend>
+                {% include "accounts/_field.html" with field=form.phone %}
+                {% include "accounts/_field.html" with field=form.contact_email %}
+            </fieldset>
+
+            <fieldset class="profile__group">
+                <legend>Social links</legend>
+                {% include "accounts/_field.html" with field=form.facebook %}
+                {% include "accounts/_field.html" with field=form.instagram %}
+                {% include "accounts/_field.html" with field=form.linkedin %}
+                {% include "accounts/_field.html" with field=form.website %}
+            </fieldset>
+
+            <div class="profile__actions">
+                <button type="submit" class="auth__submit">Save profile</button>
+                <a class="profile__cancel" href="{% url 'accounts:profile' %}">Cancel</a>
+            </div>
+        </form>
+
+    {% else %}
+        {# ---------------- Read-only view ---------------- #}
+        <div class="auth__form profile__view">
+            <div class="profile__avatar-row">
+                <span class="profile__avatar">
+                    {% if profile.image %}
+                        <img src="{{ profile.image.url }}" alt="Your profile image">
+                    {% else %}
+                        <svg viewBox="0 0 64 64" aria-hidden="true">
+                            <circle cx="32" cy="32" r="32" fill="#c8a27c"/>
+                            <circle cx="32" cy="25" r="12" fill="#3b2a21"/>
+                            <path d="M12 56c0-11 9-18 20-18s20 7 20 18z" fill="#3b2a21"/>
+                        </svg>
+                    {% endif %}
+                </span>
+                <p class="profile__view-name">{{ user.username }}</p>
+            </div>
+
+            <dl class="profile__facts">
+                <dt>Registered email</dt>
+                <dd>{{ user.email }}</dd>
+
+                <dt>Pronouns</dt>
+                <dd>{{ profile.pronouns|default:"Not set" }}</dd>
+
+                <dt>About me</dt>
+                <dd>{% if profile.about %}{{ profile.about|linebreaksbr }}{% else %}<span class="profile__not-set">Not set</span>{% endif %}</dd>
+            </dl>
+
+            <fieldset class="profile__group">
+                <legend>Contact</legend>
+                <dl class="profile__facts">
+                    <dt>Phone number</dt>
+                    <dd>{{ profile.phone|default:"Not set" }}</dd>
+                    <dt>Contact email</dt>
+                    <dd>{{ profile.contact_email|default:"Not set" }}</dd>
+                </dl>
+            </fieldset>
+
+            <fieldset class="profile__group">
+                <legend>Social links</legend>
+                <dl class="profile__facts">
+                    <dt>Facebook</dt>
+                    <dd>{% include "accounts/_fact_link.html" with value=profile.facebook %}</dd>
+                    <dt>Instagram</dt>
+                    <dd>{% include "accounts/_fact_link.html" with value=profile.instagram %}</dd>
+                    <dt>LinkedIn</dt>
+                    <dd>{% include "accounts/_fact_link.html" with value=profile.linkedin %}</dd>
+                    <dt>Website</dt>
+                    <dd>{% include "accounts/_fact_link.html" with value=profile.website %}</dd>
+                </dl>
+            </fieldset>
         </div>
 
-        {% include "accounts/_field.html" with field=form.username %}
-        {% include "accounts/_field.html" with field=form.pronouns %}
-        {% include "accounts/_field.html" with field=form.about %}
-
-        <fieldset class="profile__group">
-            <legend>Contact</legend>
-            {% include "accounts/_field.html" with field=form.phone %}
-            {% include "accounts/_field.html" with field=form.contact_email %}
-        </fieldset>
-
-        <fieldset class="profile__group">
-            <legend>Social links</legend>
-            {% include "accounts/_field.html" with field=form.facebook %}
-            {% include "accounts/_field.html" with field=form.instagram %}
-            {% include "accounts/_field.html" with field=form.linkedin %}
-            {% include "accounts/_field.html" with field=form.website %}
-        </fieldset>
-
-        <button type="submit" class="auth__submit">Save profile</button>
-    </form>
+        <div class="profile__actions">
+            <a class="auth__submit" href="?edit=1">Edit profile</a>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}
 

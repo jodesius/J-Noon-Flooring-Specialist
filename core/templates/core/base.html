@@ -53,16 +53,11 @@
 
         <div class="header-col header-col--right">
             {% if user.is_authenticated %}
-                <div class="user-menu">
-                    <button type="button" class="user-badge user-badge--button"
-                            aria-haspopup="true" aria-expanded="false">
-                        {% include "core/_avatar.html" %}
-                        <span class="user-badge__name">{{ user.get_username }}</span>
-                    </button>
-                    <div class="user-menu__panel">
-                        <a class="user-menu__link" href="{% url 'accounts:profile' %}">Edit profile</a>
-                    </div>
-                </div>
+                <a class="user-badge user-badge--link" href="{% url 'accounts:profile' %}"
+                   title="Your profile">
+                    {% include "core/_avatar.html" %}
+                    <span class="user-badge__name">{{ user.get_username }}</span>
+                </a>
             {% else %}
                 <div class="user-badge">
                     {% include "core/_avatar.html" %}

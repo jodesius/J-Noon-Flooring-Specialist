@@ -1,0 +1,26 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Verification link{% endblock %}
+
+{% block body_class %}page-password-reset{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="auth">
+    <h1>Link not valid</h1>
+
+    <div class="auth__form">
+        <p>This email verification link is invalid, has expired, or has
+           already been used.</p>
+        <p>Log in and open your profile to send a fresh one.</p>
+    </div>
+
+    <p class="auth__aside">
+        <a href="{% url 'accounts:login' %}">Go to login</a>
+    </p>
+</div>
+{% endblock %}

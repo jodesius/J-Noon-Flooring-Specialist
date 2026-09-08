@@ -50,6 +50,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    # Cloudinary media storage (staticfiles must be listed before these).
+    "cloudinary_storage",
+    "cloudinary",
+
     "core",
     "gallery",
     "bookings",
@@ -156,9 +160,34 @@ STATIC_URL = 'static/'
 
 # Media files (user uploads, e.g. profile images)
 # https://docs.djangoproject.com/en/6.1/topics/files/
+#
+# With a valid CLOUDINARY_URL (cloudinary://key:secret@cloud_name) uploads go
+# to Cloudinary, inside the folder named by CLOUDINARY_FOLDER. Otherwise they
+# are saved to the local media/ folder.
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+_cloudinary_url = os.environ.get("CLOUDINARY_URL", "")
+_use_cloudinary = _cloudinary_url.startswith("cloudinary://") and "@" in _cloudinary_url
+
+CLOUDINARY_STORAGE = {
+    # Every upload is stored under this folder in the Cloudinary account.
+    "PREFIX": os.environ.get("CLOUDINARY_FOLDER", "media"),
+}
+
+STORAGES = {
+    "default": {
+        "BACKEND": (
+            "cloudinary_storage.storage.MediaCloudinaryStorage"
+            if _use_cloudinary
+            else "django.core.files.storage.FileSystemStorage"
+        ),
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # Reject anything bigger than ~2 MB before it reaches a view; the profile
 # image validator enforces the real 1 MB limit.

@@ -1,0 +1,12 @@
+{% autoescape off %}
+Hi {{ user.username }},
+
+Please confirm that this is your email address for your J-Noon Flooring
+Specialist account by opening the link below:
+
+{{ link }}
+
+If you didn't create an account, you can ignore this email.
+
+J-Noon Flooring Specialist
+{% endautoescape %}
