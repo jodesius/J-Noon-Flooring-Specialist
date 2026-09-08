@@ -34,9 +34,11 @@ A multi-page Django site with:
 
 - A built-out **home page** (hero, about, and a live "Reviews" strip) plus
   work-gallery and bookings pages (still placeholders being built out).
-- A **client reviews** feature: signed-in customers post postcard-style
-  reviews with a star rating and an optional photo; every review is
-  moderated before it appears.
+- A **client reviews** feature with **full CRUD** (create / read / update /
+  delete): signed-in customers post postcard-style reviews with a star
+  rating and an optional photo, and can edit or delete their own. Every
+  review is **held for admin approval before it goes live**, so spam,
+  abuse, and mistaken posts never reach visitors.
 - A full customer account system: registration, login, logout, password
   reset by email, and an editable user profile with avatar upload.
 - The Django admin for staff, including the review moderation queue.
@@ -77,35 +79,41 @@ Dependencies are pinned in `requirements.txt`.
 - When signed in, the header avatar + name is a link straight to the
   profile page.
 - Per-page CSS and JS, namespaced by app.
-- **Home page** (`core`): full-bleed hero with call-to-action buttons (hero
-  image is a placeholder pending a real asset), an "About" section, and a
-  "Reviews" strip showing the six most recent approved review postcards with
-  a *See all reviews* link.
+- **Home page** (`core`): full-bleed hero with call-to-action buttons over a
+  photo of real work (crop tuned with `object-position`), an "About"
+  section, and a "Reviews" strip showing the six most recent approved
+  review postcards with a *See all reviews* link.
 - `gallery` and `bookings` are wired routes with placeholder content,
   ready to be built out.
 
 ### Client reviews (`reviews`)
 
-| Route | Purpose |
-| --- | --- |
-| `/reviews/` | Public page — every approved review postcard |
-| `/reviews/new/` | Post a review (`@login_required`) |
-| `/reviews/<uuid>/edit/` | Edit your own review (`@login_required`) |
-| `/reviews/<uuid>/delete/` | Delete a review — author, Site Admin or superuser |
+Postcard-style customer reviews with **full CRUD**, gated by admin approval.
 
-- Signed-in customers post **postcard-style reviews**: a 1–5 **star rating**
-  (required), a headline, the review text, and an **optional photo** of the
-  finished work. When no photo is uploaded a default image is shown.
-- **Moderated**: a new or edited review is `is_approved = False` and hidden
-  from the site until an admin approves it in `/admin/`. The submitter sees
-  a "will appear once it has been approved" message. Editing a review sends
-  it back to the queue.
-- The author can **edit and delete** their own reviews. **Site
-  Administrators and the superuser can delete any** review (in the site UI
-  and in `/admin/`); the admin list has one-click approve/unapprove plus
-  bulk actions.
-- Postcards have a wood-plank "backing" with white text — pure CSS, so it
-  re-skins with the palette (or can be swapped for a texture image).
+| Operation | Route | Who |
+| --- | --- | --- |
+| **Create** | `/reviews/new/` | Any signed-in user (`@login_required`) |
+| **Read** | `/reviews/` and the home "Reviews" strip | Everyone — **approved reviews only** |
+| **Update** | `/reviews/<uuid>/edit/` | The **author only** |
+| **Delete** | `/reviews/<uuid>/delete/` | The **author**, a **Site Administrator**, or the **superuser** |
+
+- A review has a 1–5 **star rating** (required), a headline, the review text,
+  and an **optional photo** of the finished work. When no photo is uploaded
+  a default image is shown.
+- **Approval required before anything is public.** A new *or edited* review
+  is saved with `is_approved = False` and stays hidden from the site until a
+  staff member approves it in `/admin/`. The submitter sees a "will appear
+  once it has been approved" message. This is the project's main defence
+  against **review spam, offensive or defamatory content, and link/SEO
+  abuse** — nothing a customer types is shown to visitors until a human has
+  seen it, and re-editing an approved review pulls it back into the queue.
+- **Moderation tools** (`/admin/`): `is_approved` is a one-click toggle on
+  the review list, plus bulk *Approve* / *Unapprove* actions. Staff can also
+  delete any review. Reviews cannot be *created* in the admin — they only
+  come from real signed-in customers through the site.
+- Postcards show the review text in white over a **flooring photo backing**
+  (a job the firm has laid) with a dark scrim for legibility. The image is a
+  single CSS variable — `--rv-postcard-bg` in `reviews/static/reviews/css/reviews.css` — so it re-skins per firm.
 - Review URLs use the review's **UUID slug**, never a sequential id.
 
 ### Accounts (`accounts`)
@@ -247,6 +255,25 @@ today, grouped by concern:
   never see `is_superuser` / `groups` / `user_permissions` and cannot act
   on superuser accounts (see [Admin & roles](#admin--roles)).
 
+### User-generated content / abuse prevention
+
+- The only content a non-staff user can publish is a **review**, and it is
+  **not published on submission** — it is queued (`is_approved = False`) and
+  a staff member must approve it. This keeps spam, offensive or defamatory
+  text, and planted links out of the public site by default (fail-closed).
+- **Editing an approved review un-approves it**, so a review cannot be
+  approved as harmless and then silently swapped for something else.
+- Posting requires a **logged-in account** (`@login_required`); there is no
+  anonymous submission path, which ties every review to an auditable user.
+- Review text is length-capped (headline 80, body 1500 chars) and rendered
+  through Django's auto-escaping — `linebreaksbr` only converts newlines, it
+  does not allow HTML — so a review cannot inject markup or script.
+- Photos go through the same Pillow content validation as every other upload
+  (see [File uploads](#file-uploads-profile-images-review-photos)).
+- Delete rights are deliberately broad for staff: a **Site Administrator or
+  the superuser can remove any review** from the site UI or the admin, so
+  bad content that slips through can be pulled immediately.
+
 ### Input handling and injection
 
 - **SQL injection**: all database access goes through the Django ORM. There
@@ -257,7 +284,8 @@ today, grouped by concern:
   password-reset email that contains no user input.
 - **Cross-site request forgery (CSRF)**: `CsrfViewMiddleware` is enabled and
   every state-changing form (`register`, `login`, `logout`, `profile`,
-  password reset) submits a `{% csrf_token %}`.
+  password reset, and review create / edit / delete) submits a
+  `{% csrf_token %}`. Review delete is POST-only with a confirmation page.
 - **Mass assignment**: forms declare an explicit field list; the profile
   form separates the editable `username` from account-security concerns.
 - Request body size is capped (`DATA_UPLOAD_MAX_MEMORY_SIZE`,
@@ -487,7 +515,7 @@ from a domain you own and authenticate (SPF, DKIM, DMARC) — see the roadmap.
 
 ## Media storage
 
-User uploads (currently just profile images) go to **Cloudinary** when
+User uploads (profile images and review photos) go to **Cloudinary** when
 `CLOUDINARY_URL` is set, otherwise to the local `media/` folder.
 
 1. Create a free account at <https://cloudinary.com>.
@@ -511,15 +539,38 @@ python manage.py test          # whole suite
 python manage.py test reviews   # just the reviews app
 ```
 
-The **`reviews` app has an automated test suite** covering the approved-only
-listing, the moderation reset on create/edit, the IDOR guard on editing, and
-the delete-permission matrix (author / stranger / Site Admin / superuser).
-Wider automated coverage is still being built out (see
-[Roadmap](#roadmap)). Every other feature added so far has been manually
-verified end-to-end — registration, login (by username and by email),
-logout, the password-reset flow including real SMTP delivery, and the
-profile / avatar-upload flow — along with all of the security behaviours
-described above.
+Every feature is checked **both ways** before it is committed: automated
+tests where they add lasting value, and a manual end-to-end pass in the
+browser for the full user journey and the look of each page.
+
+**Automated tests**
+
+- The **`reviews` app has a test suite** (`reviews/tests.py`) covering the
+  full CRUD path and its guard rails:
+  - only **approved** reviews appear in the list / on the home page;
+  - a new review, and an **edited** review, both land as `is_approved = False`;
+  - a review is attributed to `request.user`, not to anything in the form;
+  - **IDOR guard** — a user cannot edit another user's review (404);
+  - **delete-permission matrix** — allowed for the author, a Site
+    Administrator and the superuser; refused for an unrelated user.
+- `python manage.py check` (and `check --deploy` before releasing) is run on
+  every change.
+- Wider automated coverage of the older apps is still being built out (see
+  [Roadmap](#roadmap)).
+
+**Manual verification**
+
+Done end-to-end for every feature so far, most recently:
+
+- Reviews: post a review, see the "awaiting approval" message, confirm it is
+  not visible, approve it in the admin, confirm it appears on `/reviews/` and
+  the home strip; edit an own review and confirm it drops back to pending;
+  delete as the author, and delete someone else's as an admin; confirm a
+  non-owner sees no edit/delete controls.
+- Accounts: registration, login by username *and* by email, logout,
+  password-reset including real SMTP delivery, email verification, and the
+  profile / avatar-upload flow.
+- All of the security behaviours described above.
 
 > The test runner creates a temporary `test_` database. Against Neon this
 > can need a moment between runs while the previous connection closes; add
@@ -560,6 +611,10 @@ configuration, and the page/CSS/JS structure. To rebrand:
 - **Content** — home/gallery/bookings templates.
 - **Palette** — the CSS custom properties in `core/static/core/css/base.css`
   and the per-page stylesheets.
+- **Imagery** — the home hero image (`core/templates/core/home.html`), the
+  review-postcard backing (`--rv-postcard-bg` in
+  `reviews/static/reviews/css/reviews.css`), and the default review photo
+  (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`).
 - **Configuration** — a fresh `.env` (new secret key, new database, new
   email account).
 
@@ -570,11 +625,11 @@ shared code.
 
 ## Roadmap
 
-- [ ] Replace the two image placeholders with real assets: the home hero
-      image (`core/templates/core/home.html`) and the default review photo
-      (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`)
-- [x] Home page — hero, about, recent-reviews strip
-- [x] Client reviews (postcards, star rating, photo upload, moderation)
+- [ ] Replace the default review photo placeholder (`DEFAULT_REVIEW_IMAGE`
+      in `reviews/models.py`) — shown on postcards with no uploaded image
+- [x] Home page — hero (real work photo), about, recent-reviews strip
+- [x] Client reviews — full CRUD, star rating, photo upload, admin approval
+      gate, photo-backed postcards
 - [ ] Build out the work gallery (upload, categories, lightbox)
 - [ ] Bookings: real enquiry form, availability, confirmation emails
 - [ ] Contact / quote request pages
