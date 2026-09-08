@@ -27,7 +27,7 @@
 
         <div class="auth__field">
             <label for="{{ form.password.id_for_label }}">Password</label>
-            {{ form.password }}
+            {% include "accounts/_password_input.html" with field=form.password %}
         </div>
 
         <button type="submit" class="auth__submit">Log in</button>
@@ -43,5 +43,6 @@
 {% endblock %}
 
 {% block extra_js %}
+    <script src="{% static 'accounts/js/password-toggle.js' %}" defer></script>
     <script src="{% static 'accounts/js/login.js' %}" defer></script>
 {% endblock %}

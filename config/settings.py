@@ -19,7 +19,13 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv(BASE_DIR / ".env")
+# override=True makes the .env file authoritative in development: its values
+# win over anything already in the process environment. Without it, a value
+# inherited from an earlier `runserver` boot (the auto-reloader passes the
+# environment to each restarted child) would shadow an edited .env.
+# In production there is no .env file, so this call is a no-op and the real
+# host environment variables are used as-is.
+load_dotenv(BASE_DIR / ".env", override=True)
 
 
 # Quick-start development settings - unsuitable for production

@@ -52,9 +52,9 @@ credentials live in the repository.
 | Framework | Django 6.1 |
 | Database | PostgreSQL (Neon, free tier) in all environments; SQLite fallback for offline local work |
 | DB driver | psycopg 3 |
-| Config | `django-environ`-style loading via `python-dotenv` + `dj-database-url` |
+| Config | `.env` via `python-dotenv` (`override=True`) + `dj-database-url` |
 | Images | Pillow (upload validation) |
-| Email | Gmail SMTP via Django 6.1 `MAILERS`; console backend when unconfigured |
+| Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step |
 
 Dependencies are pinned in `requirements.txt`.
@@ -112,8 +112,9 @@ today, grouped by concern:
   environment. The app refuses to start if `DJANGO_SECRET_KEY` is missing.
 - `.env` is git-ignored; `.env.example` documents the required keys without
   values.
-- Real environment variables take precedence over `.env`, so production
-  hosts need no file on disk.
+- In development the `.env` file is the single source of truth (loaded with
+  `override=True`). Production ships no `.env` file, so the host's real
+  environment variables are used directly.
 
 ### Authentication and sessions
 
@@ -297,7 +298,9 @@ python manage.py runserver
 The site is at http://127.0.0.1:8000/ and the admin at
 http://127.0.0.1:8000/admin/.
 
-> `.env` is only read at startup — restart `runserver` after changing it.
+> `.env` is read at startup (and on every code reload) — restart `runserver`
+> after changing it. It is loaded with `override=True`, so its values always
+> win over anything already in the shell environment.
 
 ---
 
@@ -310,12 +313,15 @@ development. See `.env.example` for the template.
 | --- | --- | --- |
 | `DJANGO_SECRET_KEY` | Yes | Django cryptographic signing key. The app will not start without it. |
 | `DATABASE_URL` | No | PostgreSQL connection string (Neon). If unset, a local SQLite file is used. |
-| `EMAIL_HOST_USER` | No | Gmail address used to send transactional email. |
-| `EMAIL_HOST_PASSWORD` | No | Gmail **App Password** (16 characters, no spaces). Requires 2-Step Verification on the Google account. |
-| `DEFAULT_FROM_EMAIL` | No | "From" address on outgoing email, e.g. `J-Noon Flooring Specialist <name@gmail.com>`. |
+| `EMAIL_HOST` | No | SMTP server. Default `smtp.gmail.com`. |
+| `EMAIL_PORT` | No | SMTP port. Default `587` (STARTTLS). |
+| `EMAIL_USE_SSL` | No | Set to `1` only for providers that need implicit SSL (port 465). |
+| `EMAIL_HOST_USER` | No | SMTP login. For Gmail, the full address; for other providers, the login they give you. |
+| `EMAIL_HOST_PASSWORD` | No | SMTP password / key. For Gmail, a 16-char **App Password** (needs 2-Step Verification). |
+| `DEFAULT_FROM_EMAIL` | No | "From" address on outgoing email, e.g. `J-Noon Flooring Specialist <name@example.com>` (angle brackets required). |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
-via Gmail SMTP; otherwise it is printed to the `runserver` console.
+via SMTP; otherwise it is printed to the `runserver` console.
 
 ---
 
@@ -338,23 +344,38 @@ Connection pooling and health checks are configured in `settings.py`
 
 ## Email
 
-Password-reset links are the only transactional email today.
+Password-reset links are the only transactional email today. The SMTP
+settings are provider-agnostic — set `EMAIL_HOST` / `EMAIL_PORT` /
+`EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` in `.env` and restart the server.
+Leave the user/password blank and email prints to the `runserver` console.
 
-1. On the sending Google account, enable **2-Step Verification**.
-2. Create an **App Password** at
-   <https://myaccount.google.com/apppasswords> and copy the 16 characters
-   (remove spaces).
-3. Set `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` and `DEFAULT_FROM_EMAIL` in
-   `.env`, then restart the server.
-4. Verify:
+**Current dev setup:** Gmail SMTP (`smtp.gmail.com:587`) from an established
+Google account, using a 16-character **App Password**
+(<https://myaccount.google.com/apppasswords>, needs 2-Step Verification).
+`EMAIL_HOST_USER` must be the address the Google account signs in as, not an
+alias; brand-new Gmail accounts can be blocked from App Password use for
+24–72 hours.
 
-   ```bash
-   python -c "import smtplib; from dotenv import dotenv_values as d; v=d('.env'); s=smtplib.SMTP('smtp.gmail.com',587); s.starttls(); s.login(v['EMAIL_HOST_USER'], v['EMAIL_HOST_PASSWORD']); print('AUTH OK'); s.quit()"
-   ```
+**Other providers** (Brevo, SMTP2GO, Mailjet, Resend, Mailgun) are a pure
+`.env` change, e.g. Brevo:
 
-`EMAIL_HOST_USER` must be the address the Google account actually signs in
-as (not an alias). Brand-new Gmail accounts may be blocked from App Password
-use for a few hours.
+```
+EMAIL_HOST=smtp-relay.brevo.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=<login from the provider>
+EMAIL_HOST_PASSWORD=<SMTP key>
+```
+
+**Verify credentials** without sending:
+
+```bash
+python -c "import os,smtplib; from dotenv import load_dotenv; load_dotenv('.env'); s=smtplib.SMTP(os.environ.get('EMAIL_HOST','smtp.gmail.com'), int(os.environ.get('EMAIL_PORT','587'))); s.starttls(); s.login(os.environ['EMAIL_HOST_USER'], os.environ['EMAIL_HOST_PASSWORD']); print('AUTH OK'); s.quit()"
+```
+
+**Deliverability:** mail sent "from" a free-domain address
+(`@gmail.com`, `@live.co.uk`, …) that you don't control fails the Gmail /
+Yahoo / Microsoft sender rules and may be spam-foldered. The fix is to send
+from a domain you own and authenticate (SPF, DKIM, DMARC) — see the roadmap.
 
 ---
 
@@ -365,9 +386,10 @@ python manage.py test
 ```
 
 Automated test coverage is being built out (see [Roadmap](#roadmap)). Every
-feature added so far has been manually verified end-to-end, including the
-authentication, password-reset and profile flows and all of the security
-behaviours described above.
+feature added so far has been manually verified end-to-end — registration,
+login (by username and by email), logout, the password-reset flow including
+real SMTP delivery, and the profile / avatar-upload flow — along with all of
+the security behaviours described above.
 
 Also run, before any deploy:
 
@@ -380,7 +402,9 @@ python manage.py check --deploy
 ## Production deployment
 
 1. Set environment variables on the host: `DJANGO_SECRET_KEY` (a fresh one),
-   `DATABASE_URL`, and the email variables.
+   `DATABASE_URL`, and the email variables (`EMAIL_HOST`, `EMAIL_PORT`,
+   `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`). No `.env`
+   file is deployed.
 2. Apply the [production hardening checklist](#production-hardening-checklist)
    in `settings.py` — gate the `SECURE_*` settings on `DEBUG` being `False`.
 3. `python manage.py collectstatic`
@@ -415,10 +439,10 @@ shared code.
 - [ ] Bookings: real enquiry form, availability, confirmation emails
 - [ ] Contact / quote request pages
 - [ ] Rewards scheme
-- [ ] **Wire a transactional email provider** — SMTP config is
-      provider-agnostic and the password-reset flow is verified end to end
-      via the console backend; a real sender (Brevo / Mailgun / Resend, or a
-      verified domain) just needs `EMAIL_HOST*` values in `.env`
+- [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
+      deliverability — password reset currently sends via Gmail SMTP from a
+      free-domain address, which risks spam-foldering. Switching to a real
+      domain (or another provider) is a `.env` change only.
 - [ ] Automated test suite (unit + integration) and CI
 - [ ] Production settings split and hardening
 - [ ] Media storage backend for uploads
