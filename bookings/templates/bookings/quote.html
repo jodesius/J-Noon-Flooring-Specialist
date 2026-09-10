@@ -1,0 +1,69 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Get a quote{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Get a free quote</h1>
+        <p>The more you can tell me, the closer the estimate. Not sure of an answer?
+           Pick "not sure" &mdash; I'll ask if I need to.</p>
+    </header>
+
+    <div class="bookings-card">
+        <form method="post" novalidate class="bk-form">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="bk-form__errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="hp" aria-hidden="true">
+                <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
+                {{ form.website }}
+            </div>
+
+            <fieldset class="bk-form__group">
+                <legend>What do you need?</legend>
+                {% include "bookings/_field.html" with field=form.service_option %}
+                {% include "bookings/_field.html" with field=form.flooring_system %}
+                {% include "bookings/_field.html" with field=form.flooring_note %}
+            </fieldset>
+
+            <fieldset class="bk-form__group">
+                <legend>The floor</legend>
+                {% include "bookings/_field.html" with field=form.area_sqm %}
+                {% include "bookings/_field.html" with field=form.area_unknown %}
+                {% include "bookings/_field.html" with field=form.rooms %}
+                {% include "bookings/_field.html" with field=form.current_covering %}
+                {% include "bookings/_field.html" with field=form.subfloor_type %}
+                {% include "bookings/_field.html" with field=form.subfloor_condition %}
+                {% include "bookings/_field.html" with field=form.removal_needed %}
+            </fieldset>
+
+            <fieldset class="bk-form__group">
+                <legend>You &amp; the job</legend>
+                {% include "bookings/_field.html" with field=form.timescale %}
+                {% include "bookings/_field.html" with field=form.postcode %}
+                {% include "bookings/_field.html" with field=form.details %}
+                {% include "bookings/_field.html" with field=form.contact_name %}
+                {% include "bookings/_field.html" with field=form.contact_phone %}
+            </fieldset>
+
+            <p class="bk-form__disclaimer">
+                Anything you get back is a <strong>rough estimate only</strong>. Every
+                job is confirmed with a site visit &mdash; there's no obligation.
+            </p>
+
+            <button type="submit" class="bk-btn bk-btn--primary">Get my estimate</button>
+        </form>
+    </div>
+</section>
+{% endblock %}

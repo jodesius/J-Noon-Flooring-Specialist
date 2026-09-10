@@ -1,0 +1,25 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Get a quote{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Get a quote</h1>
+    </header>
+    <div class="bookings-card">
+        <p>Online quotes aren't available just now. The quickest way to get a price is
+           to give me a call or drop me a message &mdash; I'll get straight back to you.</p>
+        <p class="bookings-page__back">
+            <a class="bk-btn bk-btn--primary" href="{% url 'contact:index' %}">Contact me</a>
+        </p>
+    </div>
+</section>
+{% endblock %}

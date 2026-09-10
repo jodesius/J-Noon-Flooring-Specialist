@@ -10,10 +10,49 @@
 {% endblock %}
 
 {% block content %}
-    <h1>Bookings</h1>
-    <p>This is the bookings page.</p>
-{% endblock %}
+<section class="bookings-page">
+    <header class="bookings-page__head">
+        <h1>Bookings</h1>
+        <p>Get a free estimate, book a call, and follow your project once it's underway.</p>
+    </header>
 
-{% block extra_js %}
-    <script src="{% static 'bookings/js/bookings.js' %}" defer></script>
+    {% if not user.is_authenticated %}
+        <div class="bookings-card bookings-gate">
+            <h2>Sign in to get started</h2>
+            <p>You need an account to request a quote or make a booking. It only takes a minute.</p>
+            <div class="bookings-gate__actions">
+                <a class="bk-btn bk-btn--primary" href="{% url 'accounts:login' %}?next={% url 'bookings:quote' %}">Sign in</a>
+                <a class="bk-btn bk-btn--ghost" href="{% url 'accounts:register' %}">Register</a>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="bookings-grid">
+        <div class="bookings-card">
+            <h2>Get a free quote</h2>
+            <p>Answer a few questions about the job and get a rough estimate straight away{% if not quoting_available %} (online quotes are being set up &mdash; you'll be offered a call for now){% endif %}.</p>
+            {% if user.is_authenticated %}
+                <a class="bk-btn bk-btn--primary" href="{% url 'bookings:quote' %}">Start a quote</a>
+            {% else %}
+                <span class="bk-btn bk-btn--disabled">Sign in to start</span>
+            {% endif %}
+        </div>
+
+        <div class="bookings-card">
+            <h2>Book a call-back</h2>
+            <p>Leave your number and a day that suits, and I'll call to talk the job through.</p>
+            {% if user.is_authenticated %}
+                <a class="bk-btn bk-btn--primary" href="{% url 'bookings:call' %}">Book a call</a>
+            {% else %}
+                <span class="bk-btn bk-btn--disabled">Sign in to book</span>
+            {% endif %}
+        </div>
+
+        <div class="bookings-card bookings-card--soon">
+            <h2>Your projects</h2>
+            <p>Once a job is booked you'll be able to follow progress, see photos and costs, and pay online.</p>
+            <span class="bk-btn bk-btn--disabled">Coming soon</span>
+        </div>
+    </div>
+</section>
 {% endblock %}

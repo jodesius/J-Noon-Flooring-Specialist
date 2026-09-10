@@ -1,0 +1,70 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Your estimate{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+
+    {% if qr.status == "quoted" and qr.quote_low and qr.quote_high %}
+        <header class="bookings-page__head">
+            <h1>Your rough estimate</h1>
+        </header>
+
+        <div class="bookings-card quote-result">
+            <p class="quote-result__range">
+                &pound;{{ qr.quote_low|floatformat:0 }} &ndash; &pound;{{ qr.quote_high|floatformat:0 }}
+            </p>
+            <p class="quote-result__message">{{ qr.customer_message }}</p>
+
+            {% if qr.breakdown %}
+                <table class="quote-result__breakdown">
+                    <tbody>
+                    {% for row in qr.breakdown %}
+                        <tr>
+                            <th>{{ row.label }}</th>
+                            <td>&pound;{{ row.low|floatformat:0 }}&ndash;&pound;{{ row.high|floatformat:0 }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+
+            {% if qr.assumptions %}
+                <p class="quote-result__label">Based on</p>
+                <ul class="quote-result__assumptions">
+                    {% for a in qr.assumptions %}<li>{{ a }}</li>{% endfor %}
+                </ul>
+            {% endif %}
+
+            <p class="bk-form__disclaimer">
+                This is a <strong>rough estimate, not a binding quote.</strong> The real
+                figure depends on a site visit &mdash; I'll be in touch to arrange one.
+            </p>
+        </div>
+
+    {% else %}
+        <header class="bookings-page__head">
+            <h1>Thanks &mdash; I'll give you a call</h1>
+        </header>
+        <div class="bookings-card quote-result">
+            <p class="quote-result__message">
+                {{ qr.customer_message|default:"This one's easier to talk through on the phone. I've got your details and I'll be in touch soon." }}
+            </p>
+            <p class="bk-form__disclaimer">
+                Your request is saved. If you need me sooner, give me a call.
+            </p>
+        </div>
+    {% endif %}
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
+    </p>
+</section>
+{% endblock %}

@@ -20,6 +20,11 @@ media/
 .env.*
 !.env.example
 
+# Google service-account key (for the bookings calendar)
+gcloud-calendar-key.json
+*-service-account*.json
+*.iam.gserviceaccount.com.json
+
 # IDE / Editor
 # Keep the shared workspace settings + extension recommendations; ignore the rest.
 .vscode/*

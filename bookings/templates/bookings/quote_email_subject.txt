@@ -1,0 +1,1 @@
+Quote request from {{ qr.contact_name }} ({{ qr.postcode }}) - {{ qr.get_status_display }}

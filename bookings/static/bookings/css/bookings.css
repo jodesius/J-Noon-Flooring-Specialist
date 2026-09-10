@@ -1,13 +1,241 @@
 /* ============================================================
-   Bookings page styles
+   Bookings - landing, quote form, follow-up, estimate result.
+   Oak-brown ground, white cards with an oak-accent heading rule
+   (matches Contact us / "What we do").
    ============================================================ */
 
 .page-bookings {
-    background-color: #6b4423;   /* oak brown - matches home "about" + gallery */
+    background-color: #6b4423;   /* oak brown */
 }
 
-.page-bookings h1,
-.page-bookings p {
-    color: #fff;
+.bookings-page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+}
+.bookings-page--narrow {
+    max-width: 680px;
+}
+
+.bookings-page__head {
     text-align: center;
+    color: #fff;
+    margin-bottom: 2rem;
+}
+.bookings-page__head h1 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(1.7rem, 3.5vw, 2.2rem);
+}
+.bookings-page__head p {
+    margin: 0 auto;
+    max-width: 54ch;
+    color: #f0e4d6;
+}
+.bookings-page__back {
+    text-align: center;
+    margin-top: 1.75rem;
+}
+.bookings-page__back a { color: #f0e4d6; }
+
+/* ---------- Cards ---------- */
+.bookings-card {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    padding: 1.6rem 1.5rem 1.8rem;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+}
+.bookings-page > * + * { margin-top: 1.5rem; }
+
+.bookings-card h2 {
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.6rem;
+    font-size: 1.15rem;
+    color: #5a3b28;
+    border-bottom: 2px solid #c8a27c;
+}
+.bookings-card p {
+    color: #3f3a35;
+    line-height: 1.6;
+    margin: 0 0 1rem;
+}
+.bookings-card p:last-child { margin-bottom: 0; }
+
+.bookings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+}
+.bookings-grid .bookings-card { margin-top: 0; display: flex; flex-direction: column; }
+.bookings-grid .bookings-card p { flex: 1; }
+.bookings-card--soon { opacity: 0.72; }
+
+.bookings-gate { text-align: center; }
+.bookings-gate__actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* ---------- Buttons ---------- */
+.bk-btn {
+    display: inline-block;
+    align-self: flex-start;
+    padding: 0.65rem 1.4rem;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+.bk-btn--primary { background: #8b4b07; border-color: #8b4b07; color: #fff; }
+.bk-btn--primary:hover { background: #733d05; }
+.bk-btn--ghost { background: transparent; border-color: #6f4a30; color: #5a3b28; }
+.bk-btn--ghost:hover { background: rgba(111, 74, 48, 0.08); }
+.bk-btn--disabled {
+    background: #e7ded3; border-color: #e7ded3; color: #8a7c6c; cursor: default;
+}
+.bk-btn:focus-visible { outline: 3px solid #ffd8a8; outline-offset: 2px; }
+
+/* ---------- Form ---------- */
+.bk-form__group {
+    border: 0;
+    padding: 0;
+    margin: 0 0 1.75rem;
+}
+.bk-form__group legend {
+    font-weight: 700;
+    color: #5a3b28;
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    padding: 0;
+}
+
+.bk-field {
+    margin-bottom: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.bk-field > label {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #3f3a35;
+}
+.bk-field input[type="text"],
+.bk-field input[type="number"],
+.bk-field input[type="tel"],
+.bk-field select,
+.bk-field textarea {
+    font: inherit;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #c7bdb1;
+    border-radius: 6px;
+    background: #fdfbf9;
+    width: 100%;
+}
+.bk-field textarea { resize: vertical; }
+
+/* radio group (service option) */
+.bk-field ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.bk-field ul li label {
+    font-weight: 500;
+    color: #3f3a35;
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+/* single checkbox ("not sure of the area") */
+.bk-field--check {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+}
+.bk-field--check > label { font-weight: 500; }
+.bk-field--check input { width: auto; }
+
+.bk-field__help { font-size: 0.83rem; color: #6b6b6b; }
+.bk-field__error { font-size: 0.83rem; color: #a4291f; }
+.bk-field--invalid input,
+.bk-field--invalid select,
+.bk-field--invalid textarea { border-color: #a4291f; }
+
+.bk-form__errors {
+    background: #fbe6e6;
+    border: 1px solid #e0b1b1;
+    color: #8a1f1f;
+    border-radius: 6px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1.25rem;
+}
+.bk-form__disclaimer {
+    font-size: 0.85rem;
+    color: #6b6b6b;
+    background: #f6f1ea;
+    border-radius: 6px;
+    padding: 0.7rem 0.9rem;
+    margin: 0 0 1.25rem;
+}
+
+/* honeypot */
+.hp {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* ---------- Estimate result ---------- */
+.quote-result__range {
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    font-weight: 800;
+    color: #5a3b28;
+    margin: 0 0 0.75rem;
+    text-align: center;
+}
+.quote-result__message { font-size: 1rem; }
+.quote-result__breakdown {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+}
+.quote-result__breakdown th,
+.quote-result__breakdown td {
+    text-align: left;
+    padding: 0.55rem 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 0.95rem;
+    color: #3f3a35;
+}
+.quote-result__breakdown td { text-align: right; white-space: nowrap; font-weight: 600; }
+.quote-result__label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a6b4f;
+    margin: 1rem 0 0.4rem;
+}
+.quote-result__assumptions {
+    margin: 0 0 1.25rem;
+    padding-left: 1.25rem;
+    color: #3f3a35;
+    line-height: 1.5;
+    font-size: 0.95rem;
+}
+
+@media (max-width: 520px) {
+    .bk-btn { align-self: stretch; text-align: center; }
+    .bookings-gate__actions .bk-btn { flex: 1; }
 }

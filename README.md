@@ -21,6 +21,7 @@ firms with only branding, content and configuration changes.
 - [Database](#database)
 - [Email](#email)
 - [Media storage](#media-storage)
+- [Turning on the bookings features](#turning-on-the-bookings-features)
 - [Running the test suite](#running-the-test-suite)
 - [Production deployment](#production-deployment)
 - [Re-using this design for another firm](#re-using-this-design-for-another-firm)
@@ -35,9 +36,13 @@ A multi-page Django site with:
 
 - A built-out **home page** (hero, about, a live "Reviews" strip, a
   "How we work" section, and a "What we do" section), a **work gallery**
-  (filterable masonry grid + lightbox, photos managed in the admin), and a
-  **Contact us** page (admin-managed details, coverage map, enquiry form).
-  Bookings is still a placeholder being built out.
+  (filterable masonry grid + lightbox, photos managed in the admin), a
+  **Contact us** page (admin-managed details, coverage map, enquiry form),
+  and two **Bookings** features: an **AI-assisted free quote** (a signed-in
+  customer answers a short form and Claude produces a rough estimate, asks
+  follow-ups, or refers the job to a call, from an admin-managed rate card)
+  and **book a call-back** (name + phone + a day and time → a 30-minute
+  event lands on the fitter's Google Calendar with reminders).
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -66,6 +71,8 @@ credentials live in the repository.
 | Media storage | Cloudinary (`django-cloudinary-storage`); local `media/` folder when unconfigured |
 | Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map, with OpenStreetMap tiles — no API key |
+| AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
+| Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
 
 Dependencies are pinned in `requirements.txt`.
 
@@ -98,8 +105,62 @@ Dependencies are pinned in `requirements.txt`.
   Tiles, Screeding & Floor Prep), each with a one-line summary and a
   numbered "order of works". All static content for now; images can be
   added later.
-- `bookings` is a wired route with placeholder content, ready to be built
-  out.
+### Bookings (`bookings`)
+
+- **`/bookings/`** — landing page. Signed out: a *sign in / register* gate.
+  Signed in: **Get a free quote** and **Book a call-back** cards (both
+  built), plus a greyed-out **Your projects** card (customer portal, next up).
+
+**Book a call-back — `/bookings/call/`** (`@login_required`)
+
+- A short form: name, phone (both prefilled from the profile), a day (within
+  the next three weeks), a time picked to the half-hour, and an optional
+  message.
+- On submit it's saved as a `CallRequest` **and an event is created on the
+  fitter's Google Calendar** (via a service account — no OAuth) titled
+  "Call <name> — <phone>", a 30-minute slot at the chosen time in the
+  configured timezone, with popup reminders (12 h before and 10 min before).
+  The business also gets a plain email.
+- If the calendar isn't configured (or the API call fails) the request is
+  still saved and emailed — nothing errors. Honeypot-guarded, login-gated,
+  `CALL_DAILY_LIMIT` per user per day.
+- Staff manage requests in the admin (`CallRequest`, read-only, editable
+  status + notes, with a "on calendar?" flag).
+
+**Get a free quote — `/bookings/quote/`** (`@login_required`)
+
+- A short form (service option, flooring system or free-text, approximate
+  area or "not sure", subfloor type & condition, removal, timescale,
+  postcode, extra details; name/phone prefilled from the profile). On submit
+  it becomes a `QuoteRequest`, then:
+  - Claude reads the answers plus the **rate card** and returns either
+    **up to 4 follow-up questions** (rendered on a `/bookings/quote/<uuid>/`
+    page), **a rough £ range** with a breakdown and its assumptions, or a
+    **"we'll call you"** for anything it shouldn't price blind (repairs,
+    damaged subfloor, very large or uncertain jobs).
+  - The business gets an **email** for every request; all requests show in
+    the admin (`QuoteRequest`, read-only form data + the full AI result +
+    an editable status and staff notes).
+- **The rate card is admin data.** `QuoteSettings.rate_card` is a single
+  free-text field (seeded with J-Noon's real prices — labour rates, pattern
+  floors, subfloor prep, how materials work for supply & fit); the AI reads
+  it verbatim. `QuoteSettings` also holds a free-text rules box, an
+  estimate-headroom %, and a master on/off switch. `FlooringRate` is just
+  the picklist of systems on the form. The fitter edits the rate card in the
+  admin — no code, no redeploy — and the AI always quotes from it.
+- **Graceful states:** with no `ANTHROPIC_API_KEY`, an empty rate card, or
+  the master switch off, the quote page invites the customer to **book a
+  call** instead — nothing errors. `QUOTING_PREVIEW=1` (DEBUG only) walks the
+  whole flow with a canned sample estimate and no API key or cost.
+- **Guard rails** — every estimate is a **range, never binding, always
+  "subject to a site visit"**; the fitter reviews each one; the server
+  independently sanity-checks the AI's numbers (absolute bounds, plus a
+  per-m² band when the area is known) and downgrades an implausible quote to
+  "we'll call you"; the customer's free
+  text is fed to Claude as **data, not instructions** (the system prompt
+  says so, and structured JSON output is validated server-side); the form
+  is login-gated, honeypot-protected, and capped at `QUOTE_DAILY_LIMIT`
+  (default 5) requests per user per day.
 
 ### Contact us (`contact`)
 
@@ -246,6 +307,12 @@ Three access tiers, using Django's built-in auth:
   business details and photo shown on the page) and `ContactEnquiry`
   (read-only list of messages sent through the form, with a *handled*
   toggle).
+- **Bookings quoting** is admin-driven: `QuoteSettings` (a single row — the
+  free-text rate card the AI reads, a rules box, headroom %, master switch),
+  `FlooringRate` (the form's system picklist), and `QuoteRequest` (read-only
+  form data + full AI result, with an editable status and staff notes).
+  `CallRequest` (call-back requests) is read-only too, with status + notes
+  and an "on calendar?" indicator.
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
   every permission for the project's own apps and **none** for Django's
@@ -372,6 +439,14 @@ today, grouped by concern:
   people with CSS) — a filled-in honeypot fails validation, so the message
   is never saved or emailed. Enquiry text is length-capped and rendered
   through auto-escaping; the notification email is plain text.
+- **AI quote engine**: the quote form is `@login_required`, honeypot-guarded
+  and rate-limited per user per day. The customer's free text reaches Claude
+  as **data, not instructions** (the system prompt states this explicitly);
+  Claude's reply is **schema-constrained JSON**, parsed and re-validated
+  server-side, and the numbers are sanity-checked (absolute bounds, plus a
+  per-m² band when the area is known) before being shown. Every estimate is
+  a non-binding range subject to a site visit, and the fitter reviews each
+  request — the AI never commits the business to anything.
 - **Mass assignment**: forms declare an explicit field list; the profile
   form separates the editable `username` from account-security concerns.
 - Request body size is capped (`DATA_UPLOAD_MAX_MEMORY_SIZE`,
@@ -474,7 +549,17 @@ J-Flooring-Specialist/
 │   ├── migrations/         # 0001 initial, 0002 seed starter categories
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
-├── bookings/               # bookings (placeholder route)
+├── bookings/               # bookings landing + AI-assisted quote
+│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest
+│   ├── quoting.py          # rate card -> Claude -> parsed/validated estimate
+│   ├── calendar_sync.py    # CallRequest -> Google Calendar event (service account)
+│   ├── forms.py            # QuoteStartForm, CallRequestForm (+ honeypots), FollowUpForm
+│   ├── admin.py            # rate card + settings + read-only Quote/Call requests
+│   ├── views.py            # landing, quote form + follow-up + result, call form
+│   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits
+│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest
+│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable), call, emails
+│   └── static/bookings/    # bookings.css
 ├── contact/                # Contact us page - details, coverage map, enquiry form
 │   ├── models.py           # SiteContact (singleton), ContactEnquiry
 │   ├── forms.py            # EnquiryForm (+ honeypot)
@@ -565,6 +650,14 @@ development. See `.env.example` for the template.
 | `DEFAULT_FROM_EMAIL` | No | "From" address on outgoing email, e.g. `J-Noon Flooring Specialist <name@example.com>` (angle brackets required). |
 | `CLOUDINARY_URL` | No | `cloudinary://<key>:<secret>@<cloud_name>` from the Cloudinary dashboard (must include the `@<cloud_name>` part). If unset or malformed, uploads are stored in the local `media/` folder. |
 | `CLOUDINARY_FOLDER` | No | Folder inside the Cloudinary account that uploads go into. Default `media`. |
+| `ANTHROPIC_API_KEY` | No | From <https://console.anthropic.com/> (pay-as-you-go). Enables the AI quote engine; without it the quote page asks the customer to book a call. |
+| `ANTHROPIC_QUOTE_MODEL` | No | Model for quoting. Default `claude-sonnet-5`. |
+| `QUOTE_DAILY_LIMIT` | No | Quote requests one signed-in user may send per day. Default `5`. |
+| `QUOTING_PREVIEW` | No | `1` (DEBUG only) to demo the quote flow with a canned estimate and no API key / cost. |
+| `GOOGLE_CALENDAR_ID` | No | The calendar to add call-backs to — usually your Google account's email address. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | No | The service-account key: the whole JSON on one line, or a path to the `.json` file. Without this (and `GOOGLE_CALENDAR_ID`), call-backs are just saved + emailed. |
+| `BOOKINGS_TIMEZONE` | No | Timezone for calendar events. Default `Europe/London`. |
+| `CALL_DAILY_LIMIT` | No | Call-back requests one signed-in user may send per day. Default `3`. |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
 via SMTP; otherwise it is printed to the `runserver` console.
@@ -651,19 +744,67 @@ stragglers out of Cloudinary.
 
 ---
 
+## Turning on the bookings features
+
+Both work without their integration configured — a quote request falls back
+to "book a call", a call-back is still saved and emailed. To switch the
+integrations on:
+
+### AI quotes
+
+1. **Check the rate card.** A starter rate card (J-Noon's real prices) is
+   already seeded. Open **Bookings → Quote settings** in the admin to adjust
+   the wording, set an estimate-headroom %, and add any behavioural rules
+   ("assume 8% wastage", "no stairs", …). The AI reads that text as-is.
+   **Bookings → Flooring rates** is just the list of systems shown on the
+   form.
+2. **Add an API key.** Create one at <https://console.anthropic.com/> and put
+   it in `.env` as `ANTHROPIC_API_KEY=...`, then restart the server. It's
+   pay-as-you-go — roughly 1–3p per quote on `claude-sonnet-5`.
+
+To preview the flow first, set `QUOTING_PREVIEW=1` in `.env` (with
+`DEBUG = True`) — it walks the whole journey with a canned estimate and no
+API key or cost. Every request is saved as a `QuoteRequest` and emailed;
+review them in **Bookings → Quote requests**.
+
+### Google Calendar for call-backs
+
+1. In the [Google Cloud console](https://console.cloud.google.com/): create
+   (or pick) a project, then **APIs & Services → Library → enable "Google
+   Calendar API"**.
+2. **APIs & Services → Credentials → Create credentials → Service account.**
+   Give it a name, skip the optional roles. Open the new service account →
+   **Keys → Add key → JSON** → download the file. Note the service account's
+   email (`…@….iam.gserviceaccount.com`).
+3. In **Google Calendar** (web) → the calendar's **Settings and sharing →
+   Share with specific people → Add** → paste the service-account email →
+   permission **"Make changes to events"**.
+4. In `.env`: `GOOGLE_CALENDAR_ID=your-google-email@gmail.com` and
+   `GOOGLE_SERVICE_ACCOUNT_JSON=` the contents of that JSON file on one line
+   (or an absolute path to it). Restart the server.
+
+Every call-back is saved as a `CallRequest` and emailed regardless; the
+calendar event is a bonus. Review them in **Bookings → Call requests**.
+
+---
+
 ## Running the test suite
 
 ```bash
 python manage.py test           # whole suite
+python manage.py test bookings   # just the bookings app
 python manage.py test reviews    # just the reviews app
 python manage.py test gallery    # just the gallery app
 python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **28**, across `core`,
-`contact`, `reviews` and `gallery`), and a manual end-to-end pass in the
-browser for the full user journey and the look of each page.
+tests where they add lasting value (currently **58**, across `core`,
+`bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
+pass in the browser for the full user journey and the look of each page.
+Tests that touch the AI or Google Calendar **mock those calls** — no real
+external API is ever
+hit from the test suite.
 
 **Automated tests**
 
@@ -688,6 +829,15 @@ browser for the full user journey and the look of each page.
   one row, a valid enquiry is saved *and* emailed (with `reply-to` set),
   the honeypot blocks spam, required fields are enforced, and a missing
   recipient still saves the enquiry.
+- The **`bookings` app has a test suite** (`bookings/tests.py`, AI and
+  calendar mocked): the quote page is login-gated and shows "book a call"
+  when quoting isn't configured; a valid submission creates a `QuoteRequest`
+  and emails the business; the **need-info → follow-up → quote** path works;
+  a `QuotingUnavailable` falls back to "we'll call you"; the sanity check
+  downgrades an implausible AI quote; and — for call-backs — a booking saves
+  a `CallRequest`, creates a calendar event and emails; it still works when
+  the calendar isn't configured; past dates, the honeypot and the daily
+  limits are all rejected; one user can't open another's quote.
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -697,6 +847,14 @@ browser for the full user journey and the look of each page.
 
 Done end-to-end for every feature so far, most recently:
 
+- Bookings call-back: submitted the form, confirmed the "I'll call you
+  <period> on <day>" message, the `CallRequest` row, and the staff email
+  (calendar not yet configured, so no event — the fallback path).
+- Bookings quote: walked all four outcomes in `QUOTING_PREVIEW` mode (direct
+  estimate with breakdown, need-info → follow-up → estimate, refer-to-call,
+  and the "book a call" fallback when unconfigured); confirmed the
+  `QuoteRequest` rows and the staff email; checked the signed-out gate and
+  the greyed-out "coming soon" cards.
 - Reviews: post a review, see the "awaiting approval" message, confirm it is
   not visible, approve it in the admin, confirm it appears on `/reviews/` and
   the home strip; edit an own review and confirm it drops back to pending;
@@ -793,7 +951,16 @@ shared code.
       enquiry form (saved + emailed, honeypot spam guard)
 - [ ] Contact follow-ups: real photo, rate-limit the form, auto-reply to
       the sender
-- [ ] Bookings: real enquiry form, availability, confirmation emails
+- [ ] Add the Anthropic API key + the Google Calendar service account to
+      switch the two bookings integrations live
+- [x] Bookings — AI-assisted free quote (rate card in the admin, Claude
+      estimate / follow-ups / refer-to-call, staff email, guard rails)
+- [x] Bookings — book a call-back (name + phone + day/time → 30-min Google
+      Calendar event + reminders + staff email)
+- [ ] Bookings next: a proper availability calendar (real slots, working
+      hours, no double-booking)
+- [ ] Bookings next: customer portal — active project view, work photos,
+      costs, and online payment (Stripe) with a cash "mark as paid" option
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a

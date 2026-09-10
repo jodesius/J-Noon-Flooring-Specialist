@@ -1,0 +1,12 @@
+Call-back request via the website.
+
+Name:  {{ call.name }}
+Phone: {{ call.phone }}
+When:  {{ call.preferred_date|date:"l d F Y" }} at {{ call.when_label }}
+{% if call.message %}
+Message:
+{{ call.message }}
+{% endif %}
+{% if call.calendar_event_id %}Added to your Google Calendar.{% else %}(Not added to your calendar - check the Google Calendar settings.){% endif %}
+
+Manage: {{ url }}

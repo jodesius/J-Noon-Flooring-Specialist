@@ -1,0 +1,46 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Book a call-back{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Book a call-back</h1>
+        <p>Leave your number and a day that suits, and I'll call you to talk the job through.</p>
+    </header>
+
+    <div class="bookings-card">
+        <form method="post" novalidate class="bk-form">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="bk-form__errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="hp" aria-hidden="true">
+                <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
+                {{ form.website }}
+            </div>
+
+            {% include "bookings/_field.html" with field=form.name %}
+            {% include "bookings/_field.html" with field=form.phone %}
+            {% include "bookings/_field.html" with field=form.preferred_date %}
+            {% include "bookings/_field.html" with field=form.preferred_time %}
+            {% include "bookings/_field.html" with field=form.message %}
+
+            <button type="submit" class="bk-btn bk-btn--primary">Request a call</button>
+        </form>
+    </div>
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
+    </p>
+</section>
+{% endblock %}

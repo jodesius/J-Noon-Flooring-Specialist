@@ -1,0 +1,30 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | A few more details{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Just a few more details</h1>
+        <p>{{ qr.customer_message|default:"Answer what you can and I'll work out a rough figure." }}</p>
+    </header>
+
+    <div class="bookings-card">
+        <form method="post" novalidate class="bk-form">
+            {% csrf_token %}
+            {% for field in form %}
+                {% include "bookings/_field.html" with field=field %}
+            {% endfor %}
+            <p class="bk-form__disclaimer">Leave anything blank if you're not sure.</p>
+            <button type="submit" class="bk-btn bk-btn--primary">Send answers</button>
+        </form>
+    </div>
+</section>
+{% endblock %}

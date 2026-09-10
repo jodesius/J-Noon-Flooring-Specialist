@@ -240,3 +240,33 @@ else:
             "BACKEND": "django.core.mail.backends.console.EmailBackend",
         },
     }
+
+
+# AI quoting (bookings app)
+# https://console.anthropic.com/ -> API keys
+#
+# With ANTHROPIC_API_KEY set, the online quote form is handled by Claude.
+# Without it, the quote page invites the customer to book a call instead.
+# Set QUOTING_PREVIEW=1 (DEBUG only) to preview the flow with a canned
+# sample estimate and no API key / cost.
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_QUOTE_MODEL = os.environ.get("ANTHROPIC_QUOTE_MODEL", "claude-sonnet-5")
+QUOTING_PREVIEW = (
+    DEBUG and os.environ.get("QUOTING_PREVIEW", "").strip().lower() in {"1", "true", "yes"}
+)
+# How many quote requests one signed-in user may submit per day.
+QUOTE_DAILY_LIMIT = int(os.environ.get("QUOTE_DAILY_LIMIT", "5"))
+
+
+# Google Calendar (bookings "book a call")
+# A call-back request creates an event on the fitter's calendar via a Google
+# service account. Without both settings, a call request is just saved and
+# emailed instead.
+#   GOOGLE_CALENDAR_ID          - usually the Google account's email address
+#   GOOGLE_SERVICE_ACCOUNT_JSON - the whole service-account key file, as JSON,
+#                                 OR an absolute path to that .json file
+GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
+GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+BOOKINGS_TIMEZONE = os.environ.get("BOOKINGS_TIMEZONE", "Europe/London")
+CALL_DAILY_LIMIT = int(os.environ.get("CALL_DAILY_LIMIT", "3"))

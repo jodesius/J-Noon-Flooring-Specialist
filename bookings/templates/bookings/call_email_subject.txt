@@ -1,0 +1,1 @@
+Call-back: {{ call.name }} - {{ call.preferred_date|date:"D d M" }} {{ call.when_label }}

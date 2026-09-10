@@ -1,0 +1,27 @@
+New quote request via the website.
+
+Status:   {{ qr.get_status_display }}
+{% if qr.quote_low and qr.quote_high %}AI estimate: £{{ qr.quote_low|floatformat:0 }}-£{{ qr.quote_high|floatformat:0 }}
+{% endif %}
+Name:     {{ qr.contact_name }}
+Phone:    {{ qr.contact_phone|default:"(not given)" }}
+Postcode: {{ qr.postcode }}
+
+Service:  {{ qr.get_service_option_display }}
+Flooring: {% if qr.flooring_system %}{{ qr.flooring_system.name }}{% endif %}{% if qr.flooring_note %} - {{ qr.flooring_note }}{% endif %}
+Area:     {% if qr.area_unknown %}not sure{% elif qr.area_sqm %}{{ qr.area_sqm }} m²{% endif %}
+Rooms:    {{ qr.rooms|default:"-" }}
+Now down: {{ qr.current_covering|default:"-" }}
+Subfloor: {{ qr.get_subfloor_type_display }}, {{ qr.get_subfloor_condition_display }}
+Removal:  {{ qr.get_removal_needed_display }}
+Timescale:{{ qr.get_timescale_display }}
+{% if qr.details %}
+Details:  {{ qr.details }}
+{% endif %}{% if qr.ai_answers %}
+Follow-up answers:
+{% for q, a in qr.ai_answers.items %}  {{ q }}
+    {{ a|default:"(blank)" }}
+{% endfor %}{% endif %}{% if qr.ai_result.internal_note %}
+Note for you: {{ qr.ai_result.internal_note }}
+{% endif %}
+Full request: {{ url }}
