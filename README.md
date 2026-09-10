@@ -71,22 +71,29 @@ Dependencies are pinned in `requirements.txt`.
 
 ## Features
 
-### Public site (`core`, `gallery`, `bookings`)
+### Public site (`core`, `gallery`, `bookings`, `contact`)
 
 - Shared `base.html` layout: walnut header with a collapsible navigation
-  menu, a centred brand wordmark (links home), and the user badge; footer
-  carries the company logo (served from Cloudinary).
+  menu, a centred brand wordmark (its badge shows the JN logo image, kept
+  inside the framed border), and the user badge; footer carries the company
+  logo (served from Cloudinary).
 - Context-aware navigation — the current page is hidden from the menu, and
   the menu shows *Login / Register* or *Logout* depending on auth state.
 - When signed in, the header avatar + name is a link straight to the
   profile page.
-- Per-page CSS and JS, namespaced by app.
+- Per-page CSS and JS, namespaced by app. The home "about" section, the
+  gallery, bookings and contact pages, and the error page all share one oak
+  brown (`#6b4423`) background.
 - **Home page** (`core`): full-bleed hero with call-to-action buttons over a
   photo of real work (crop tuned with `object-position`), an "About"
   section, and a "Reviews" strip showing the six most recent approved
   review postcards with a *See all reviews* link.
-- `bookings` is a wired route with placeholder content, ready to be built
-  out.
+- `bookings` and `contact` are wired routes with placeholder content, ready
+  to be built out.
+- **Custom 404 page** (`core/templates/404.html`): on-theme "page not found"
+  with an explanation of the URL error and a link back home. Django serves
+  it automatically for any unmatched URL when `DEBUG = False` (in local dev
+  with `DEBUG = True` you still get Django's debug page).
 
 ### Work gallery (`gallery`)
 
@@ -105,16 +112,21 @@ Dependencies are pinned in `requirements.txt`.
 - Photos are **managed entirely in the Django admin** (`GalleryImage`):
   upload, title, alt text, category, a *show on site* toggle, and a
   `sort_order`. A thumbnail preview shows in the change form and the list.
+- **Deleting a photo** — the *Delete* button on a photo's change page, or
+  the *Delete selected gallery images* bulk action on the list — removes the
+  row **and** the underlying file from storage (`GalleryImageAdmin`
+  overrides `delete_model` / `delete_queryset`). Django would otherwise
+  leave the file orphaned.
 - Grid and lightbox images are served at sensible sizes via **Cloudinary
   transformations** (`f_auto,q_auto,c_limit,w_900` / `w_1800`) built onto
   the stored URL — the original upload is never sent to the browser.
 - Image dimensions are captured on upload and written as `width`/`height`
   attributes, so the grid does not reflow as photos load.
-- Deleting or replacing a photo in the admin removes the database row but
-  (by Django's design) leaves the old file in storage. `python manage.py
-  prune_gallery_media` deletes storage files that no longer have a row
-  (`--dry-run` to preview, `--yes` to skip the prompt); it works against
-  Cloudinary or the local `media/` folder.
+- `python manage.py prune_gallery_media` is the backstop: it deletes storage
+  files with no matching row (from older deletes, replaced images, or direct
+  DB edits). `--dry-run` to preview, `--yes` to skip the prompt; works
+  against Cloudinary or the local `media/` folder. The shared file-deletion
+  helpers live in `gallery/cleanup.py`.
 
 ### Client reviews (`reviews`)
 
@@ -358,7 +370,7 @@ The following are **not** enabled in the committed settings because
 `DEBUG=True` is the local-development default. They must be applied before
 the site is public — see [Production deployment](#production-deployment):
 
-- `DEBUG = False`
+- `DEBUG = False` (this also switches on the custom `404.html` page)
 - `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` set to the real domain(s)
 - `SECURE_SSL_REDIRECT = True`
 - `SESSION_COOKIE_SECURE = True`, `CSRF_COOKIE_SECURE = True`
@@ -381,7 +393,9 @@ J-Flooring-Specialist/
 │   └── urls.py
 ├── core/                   # shared base template, home page, site chrome
 │   ├── templates/core/     # base.html, _avatar.html, home.html
-│   ├── static/core/        # base.css / base.js, home.css / home.js
+│   ├── templates/404.html  # custom "page not found" page
+│   ├── static/core/        # base.css / base.js, home.css / home.js, error.css
+│   ├── tests.py            # custom 404 renders for unknown URLs
 │   └── views.py            # home view (feeds the recent-reviews strip)
 ├── accounts/               # user model, auth, profiles, roles
 │   ├── models.py           # User, Profile
@@ -409,14 +423,16 @@ J-Flooring-Specialist/
 ├── gallery/                # filterable work-gallery grid + lightbox
 │   ├── models.py           # GalleryImage, Category
 │   ├── validators.py       # gallery-photo validation (Pillow, 10 MB)
-│   ├── admin.py            # image + category admin, thumbnail previews
+│   ├── cleanup.py          # storage file list / delete helpers (Cloudinary + local)
+│   ├── admin.py            # image + category admin; delete also removes the file
 │   ├── views.py            # published images + categories-with-photos
-│   ├── tests.py            # published filter, category filter, model rules
+│   ├── tests.py            # views, model rules, admin delete, prune command
 │   ├── management/commands/ # prune_gallery_media
 │   ├── migrations/         # 0001 initial, 0002 seed starter categories
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
 ├── bookings/               # bookings (placeholder route)
+├── contact/                # contact (placeholder route)
 ├── manage.py
 ├── requirements.txt
 ├── .env.example
@@ -575,10 +591,11 @@ backend based on whether a valid `CLOUDINARY_URL` is present. Files keep
 their random UUID names inside `CLOUDINARY_FOLDER`; Cloudinary serves them
 from its CDN.
 
-Django never deletes an upload when its model row goes away, so replacing or
-deleting a gallery photo in the admin leaves the old file behind. Run
-`python manage.py prune_gallery_media` now and then (or `--dry-run` first) to
-clear those orphans out of Cloudinary.
+Deleting a gallery photo in the admin removes its file too (the admin
+overrides `delete_model` / `delete_queryset`). Django does **not** do this
+for replaced images or other models, so run `python manage.py
+prune_gallery_media` now and then (or `--dry-run` first) to clear any
+stragglers out of Cloudinary.
 
 ---
 
@@ -591,9 +608,9 @@ python manage.py test gallery    # just the gallery app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **17**, in `reviews` and
-`gallery`), and a manual end-to-end pass in the browser for the full user
-journey and the look of each page.
+tests where they add lasting value (currently **21**, across `core`,
+`contact`, `reviews` and `gallery`), and a manual end-to-end pass in the
+browser for the full user journey and the look of each page.
 
 **Automated tests**
 
@@ -608,8 +625,12 @@ journey and the look of each page.
 - The **`gallery` app has a test suite** (`gallery/tests.py`): only
   `is_published` photos are shown, the filter bar lists only categories that
   have a published photo, the empty state renders, category slugs are
-  auto-generated, image dimensions are captured on upload, and
-  `prune_gallery_media` deletes only files with no database row.
+  auto-generated, image dimensions are captured on upload, the admin's
+  change-page and bulk deletes both remove the row **and** the file, and
+  `prune_gallery_media` deletes only files with no database row. (These
+  tests use `InMemoryStorage` so nothing is written to Cloudinary.)
+- `core/tests.py` checks an unknown URL renders the custom `404.html`;
+  `contact/tests.py` checks the contact page renders.
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -700,8 +721,10 @@ shared code.
       category filter, lightbox
 - [ ] Gallery follow-ups: per-image ordering by drag, optional captions in
       the lightbox, "load more" if the library gets large
+- [x] Custom 404 page
+- [ ] Custom 403 / 500 pages (reuse `error.css`)
 - [ ] Bookings: real enquiry form, availability, confirmation emails
-- [ ] Contact / quote request pages
+- [ ] Contact page: enquiry form + business details (page scaffolded)
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a

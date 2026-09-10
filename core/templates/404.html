@@ -1,0 +1,29 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Page not found (404){% endblock %}
+
+{% block body_class %}page-error{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'core/css/error.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="error-page">
+    <p class="error-page__code" aria-hidden="true">404</p>
+    <h1 class="error-page__title">Page not found</h1>
+    <p class="error-page__text">
+        Sorry &mdash; there's nothing at this address. This is a
+        <strong>404 URL error</strong>: the site is working fine, it just
+        can't find a page here. The link you followed may be broken, or the
+        address may have been mistyped.
+    </p>
+    <a class="error-page__home" href="{% url 'core:home' %}">Back to the home page</a>
+    <nav class="error-page__links" aria-label="Other pages">
+        <a href="{% url 'gallery:index' %}">Work Gallery</a>
+        <a href="{% url 'bookings:index' %}">Bookings</a>
+        <a href="{% url 'contact:index' %}">Contact</a>
+    </nav>
+</section>
+{% endblock %}

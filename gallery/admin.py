@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
+from .cleanup import delete_stored_files
 from .models import Category, GalleryImage
 
 
@@ -39,6 +40,23 @@ class GalleryImageAdmin(admin.ModelAdmin):
         ("Display", {"fields": ("is_published", "sort_order")}),
         ("Details", {"fields": ("width", "height", "created_at", "updated_at")}),
     )
+
+    # -- delete: also remove the underlying file from storage --------------
+    # The "Delete" button on the change page and the "Delete selected images"
+    # bulk action both route through these, so a deleted photo never leaves
+    # an orphan file behind in Cloudinary.
+
+    def delete_model(self, request, obj):
+        name = obj.image.name
+        super().delete_model(request, obj)
+        delete_stored_files([name])
+
+    def delete_queryset(self, request, queryset):
+        names = [obj.image.name for obj in queryset]
+        super().delete_queryset(request, queryset)
+        delete_stored_files(names)
+
+    # -- thumbnails ------------------------------------------------------
 
     @admin.display(description="")
     def thumb(self, obj):

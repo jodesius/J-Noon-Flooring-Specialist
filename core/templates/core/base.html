@@ -29,6 +29,9 @@
                         {% if current != "bookings:index" %}
                             <a class="menu__link" href="{% url 'bookings:index' %}">Bookings</a>
                         {% endif %}
+                        {% if current != "contact:index" %}
+                            <a class="menu__link" href="{% url 'contact:index' %}">Contact</a>
+                        {% endif %}
                         {% if user.is_authenticated %}
                             <form class="menu__logout" method="post" action="{% url 'accounts:logout' %}">
                                 {% csrf_token %}

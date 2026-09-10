@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Contact{% endblock %}
+
+{% block body_class %}page-contact{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'contact/css/contact.css' %}">
+{% endblock %}
+
+{% block content %}
+    <h1>Contact</h1>
+    <p>This is the contact page.</p>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'contact/js/contact.js' %}" defer></script>
+{% endblock %}

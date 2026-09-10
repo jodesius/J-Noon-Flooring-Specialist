@@ -25,6 +25,7 @@ MANAGED_APP_LABELS = (
     "gallery",
     "bookings",
     "reviews",
+    "contact",
     "quotes",
     "rewards",
 )

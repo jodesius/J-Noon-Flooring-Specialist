@@ -1,0 +1,73 @@
+/* ============================================================
+   Error pages (404, and any future 403 / 500).
+   Oak-brown theme, matching the rest of the site.
+   ============================================================ */
+
+.page-error {
+    background-color: #6b4423;   /* oak brown */
+}
+
+.error-page {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 5rem;
+    text-align: center;
+    color: #fff;
+}
+
+.error-page__code {
+    margin: 0;
+    font-size: clamp(4.5rem, 18vw, 9rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: #c8a27c;                       /* light oak accent */
+    text-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+.error-page__title {
+    margin: 0.4rem 0 1rem;
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+}
+
+.error-page__text {
+    margin: 0 auto 2.25rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #f0e4d6;
+}
+
+.error-page__home {
+    display: inline-block;
+    padding: 0.75rem 1.6rem;
+    border-radius: 8px;
+    background: #8b4b07;
+    border: 1px solid #8b4b07;
+    color: #fff;
+    font-size: 1rem;
+    text-decoration: none;
+}
+.error-page__home:hover {
+    background: #733d05;
+}
+.error-page__home:focus-visible {
+    outline: 3px solid #ffd8a8;
+    outline-offset: 2px;
+}
+
+.error-page__links {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-top: 2.25rem;
+}
+.error-page__links a {
+    color: #f0e4d6;
+    font-size: 0.95rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.error-page__links a:hover {
+    color: #fff;
+}

@@ -1,13 +1,26 @@
 from io import BytesIO, StringIO
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .management.commands.prune_gallery_media import Command as PruneCommand
 from .models import Category, GalleryImage
+
+# Keep test uploads off Cloudinary / the real disk - saving an ImageField
+# goes through the configured storage, and a rolled-back test would still
+# leave the uploaded file behind.
+IN_MEMORY_STORAGE = override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
+    }
+)
 
 
 def tiny_png():
@@ -19,6 +32,7 @@ def tiny_png():
     return SimpleUploadedFile("shot.png", buf.read(), content_type="image/png")
 
 
+@IN_MEMORY_STORAGE
 class GalleryViewTests(TestCase):
     def setUp(self):
         # A seed migration ships a starter set of categories, so fetch-or-create.
@@ -64,6 +78,7 @@ class CategoryModelTests(TestCase):
         self.assertEqual(cat.slug, "polished-concrete-look")
 
 
+@IN_MEMORY_STORAGE
 class GalleryImageModelTests(TestCase):
     def test_dimensions_are_captured_on_save(self):
         img = GalleryImage.objects.create(image=tiny_png(), title="Sized")
@@ -74,6 +89,51 @@ class GalleryImageModelTests(TestCase):
         self.assertEqual(img.display_alt, "Just a title")
 
 
+@IN_MEMORY_STORAGE
+class GalleryImageAdminDeleteTests(TestCase):
+    """The admin's Delete button and 'Delete selected images' bulk action
+    both remove the row *and* the underlying storage file.
+    """
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="root", email="root@example.com", password="pw"
+        )
+        self.client.force_login(self.admin)
+
+    def test_change_page_delete_removes_row_and_file(self):
+        img = GalleryImage.objects.create(image=tiny_png(), title="Mistake")
+        name = img.image.name
+
+        with patch("gallery.admin.delete_stored_files") as mock_delete:
+            self.client.post(
+                reverse("admin:gallery_galleryimage_delete", args=[img.pk]),
+                {"post": "yes"},
+            )
+
+        self.assertFalse(GalleryImage.objects.filter(pk=img.pk).exists())
+        mock_delete.assert_called_once_with([name])
+
+    def test_bulk_delete_action_removes_rows_and_files(self):
+        a = GalleryImage.objects.create(image=tiny_png(), title="A")
+        b = GalleryImage.objects.create(image=tiny_png(), title="B")
+
+        with patch("gallery.admin.delete_stored_files") as mock_delete:
+            self.client.post(
+                reverse("admin:gallery_galleryimage_changelist"),
+                {
+                    "action": "delete_selected",
+                    "_selected_action": [a.pk, b.pk],
+                    "post": "yes",
+                },
+            )
+
+        self.assertEqual(GalleryImage.objects.count(), 0)
+        mock_delete.assert_called_once()
+        self.assertCountEqual(mock_delete.call_args[0][0], [a.image.name, b.image.name])
+
+
+@IN_MEMORY_STORAGE
 class PruneGalleryMediaTests(TestCase):
     def test_deletes_only_files_with_no_row(self):
         kept = GalleryImage.objects.create(image=tiny_png(), title="Kept")
