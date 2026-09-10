@@ -33,9 +33,10 @@ firms with only branding, content and configuration changes.
 
 A multi-page Django site with:
 
-- A built-out **home page** (hero, about, and a live "Reviews" strip) and a
-  **work gallery** (filterable masonry grid + lightbox, photos managed in the
-  admin). Bookings is still a placeholder being built out.
+- A built-out **home page** (hero, about, a live "Reviews" strip, a
+  "How we work" section, and a "What we do" section) and a **work gallery**
+  (filterable masonry grid + lightbox, photos managed in the admin).
+  Bookings and Contact are still placeholders being built out.
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -81,13 +82,21 @@ Dependencies are pinned in `requirements.txt`.
   the menu shows *Login / Register* or *Logout* depending on auth state.
 - When signed in, the header avatar + name is a link straight to the
   profile page.
-- Per-page CSS and JS, namespaced by app. The home "about" section, the
-  gallery, bookings and contact pages, and the error page all share one oak
-  brown (`#6b4423`) background.
+- Per-page CSS and JS, namespaced by app. The home "about" and "how we
+  work" sections, the gallery, bookings and contact pages, and the error
+  page all share one oak brown (`#6b4423`) background; "reviews" and "what
+  we do" sit on the light `#f5efe8` ground for contrast.
 - **Home page** (`core`): full-bleed hero with call-to-action buttons over a
   photo of real work (crop tuned with `object-position`), an "About"
-  section, and a "Reviews" strip showing the six most recent approved
-  review postcards with a *See all reviews* link.
+  section, a "Reviews" strip showing the six most recent approved review
+  postcards with a *See all reviews* link, a **"How we work"** section —
+  three equal cards (Supply & Fit / Installation Only / Repairs & Remedials)
+  each listing what the client pays for, plus a *Get a quote* button to
+  Bookings — and a **"What we do"** section: a card per flooring system
+  (Laminate, LVT, Amtico, Engineered & Solid Wood, Vinyl, Carpet & Carpet
+  Tiles, Screeding & Floor Prep), each with a one-line summary and a
+  numbered "order of works". All static content for now; images can be
+  added later.
 - `bookings` and `contact` are wired routes with placeholder content, ready
   to be built out.
 - **Custom 404 page** (`core/templates/404.html`): on-theme "page not found"
@@ -153,9 +162,10 @@ Postcard-style customer reviews with **full CRUD**, gated by admin approval.
   the review list, plus bulk *Approve* / *Unapprove* actions. Staff can also
   delete any review. Reviews cannot be *created* in the admin — they only
   come from real signed-in customers through the site.
-- Postcards show the review text in white over a **flooring photo backing**
-  (a job the firm has laid) with a dark scrim for legibility. The image is a
-  single CSS variable — `--rv-postcard-bg` in `reviews/static/reviews/css/reviews.css` — so it re-skins per firm.
+- Postcards are **light cards with dark text**, matching the home page's
+  "What we do" cards (white body, oak-accent title underline, work photo on
+  top). The `/reviews/` page shares the same cream (`#f5efe8`) ground as the
+  home "Reviews" strip.
 - Review URLs use the review's **UUID slug**, never a sequential id.
 
 ### Accounts (`accounts`)
@@ -694,11 +704,9 @@ configuration, and the page/CSS/JS structure. To rebrand:
 - **Content** — home/gallery/bookings templates.
 - **Palette** — the CSS custom properties in `core/static/core/css/base.css`
   and the per-page stylesheets.
-- **Imagery** — the home hero image (`core/templates/core/home.html`), the
-  review-postcard backing (`--rv-postcard-bg` in
-  `reviews/static/reviews/css/reviews.css`), and the default review photo
-  (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`). Gallery photos and their
-  categories are all admin data — no code changes.
+- **Imagery** — the home hero image (`core/templates/core/home.html`) and
+  the default review photo (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`).
+  Gallery photos and their categories are all admin data — no code changes.
 - **Gallery breakpoints** — the `column-count` media queries in
   `gallery/static/gallery/css/gallery.css` if a firm wants a different
   column progression.
@@ -714,7 +722,9 @@ shared code.
 
 - [ ] Replace the default review photo placeholder (`DEFAULT_REVIEW_IMAGE`
       in `reviews/models.py`) — shown on postcards with no uploaded image
-- [x] Home page — hero (real work photo), about, recent-reviews strip
+- [x] Home page — hero (real work photo), about, recent-reviews strip,
+      "how we work" (three service options), "what we do" (seven systems)
+- [ ] Add photos to the "what we do" cards (currently text only)
 - [x] Client reviews — full CRUD, star rating, photo upload, admin approval
       gate, photo-backed postcards
 - [x] Work gallery — admin-managed photos, responsive masonry grid,

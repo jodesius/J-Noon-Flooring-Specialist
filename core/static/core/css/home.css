@@ -1,5 +1,5 @@
 /* ============================================================
-   Home page - hero, about, reviews sections.
+   Home page - hero, about, reviews, "how we work", "what we do".
    Wood-flooring palette (see core/base.css). Button styles
    (.btn / .btn--primary / .btn--ghost) come from reviews.css,
    which the home template also loads.
@@ -125,6 +125,198 @@
     gap: 0.85rem;
     flex-wrap: wrap;
     margin-top: 2.25rem;
+}
+
+/* ---------- How we work ---------- */
+.how-we-work {
+    background: #6b4423;   /* oak brown */
+}
+.how-we-work__inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 3.75rem;
+}
+.how-we-work__head {
+    text-align: center;
+    margin-bottom: 2.25rem;
+    color: #fff;
+}
+.how-we-work__head h2 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+}
+.how-we-work__head p {
+    margin: 0 auto;
+    max-width: 48ch;
+    color: #f0e4d6;
+}
+
+.hww-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+}
+
+.hww-card {
+    display: flex;
+    flex-direction: column;
+    background: #faf6f1;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    padding: 1.75rem 1.5rem 1.9rem;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+.hww-card__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    background: #6b4423;
+    color: #fff;
+    font-weight: 800;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+.hww-card__title {
+    margin: 0 0 0.6rem;
+    font-size: 1.2rem;
+    color: #5a3b28;
+}
+.hww-card__text {
+    margin: 0 0 1.25rem;
+    font-size: 0.97rem;
+    line-height: 1.6;
+    color: #4a4038;
+}
+.hww-card__pay {
+    margin-top: auto;   /* keeps the "you pay for" block bottom-aligned */
+}
+.hww-card__label {
+    margin: 0 0 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #8a6b4f;
+}
+.hww-card__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.hww-card__list li {
+    position: relative;
+    padding-left: 1.35rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: #3f3a35;
+}
+.hww-card__list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.45em;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 2px;
+    background: #c8a27c;   /* light oak accent */
+}
+
+.how-we-work__foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.9rem;
+    margin-top: 2.75rem;
+    text-align: center;
+}
+.how-we-work__foot p {
+    margin: 0;
+    color: #f0e4d6;
+}
+
+@media (max-width: 880px) {
+    .hww-grid {
+        grid-template-columns: 1fr;
+        max-width: 460px;
+        margin: 0 auto;
+    }
+    .hww-card__pay { margin-top: 1rem; }
+}
+
+/* ---------- What we do ---------- */
+.what-we-do {
+    background: #f5efe8;
+}
+.what-we-do__inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 3.75rem;
+}
+.what-we-do__head {
+    text-align: center;
+    margin-bottom: 2.25rem;
+}
+.what-we-do__head h2 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    color: #5a3b28;
+}
+.what-we-do__head p {
+    margin: 0 auto;
+    max-width: 50ch;
+    color: #5b5b5b;
+}
+
+.wwd-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.25rem;
+}
+.wwd-card {
+    flex: 0 1 340px;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    padding: 1.5rem 1.4rem 1.65rem;
+    box-shadow: 0 8px 22px rgba(60, 40, 25, 0.12);
+}
+.wwd-card__title {
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.65rem;
+    font-size: 1.15rem;
+    color: #5a3b28;
+    border-bottom: 2px solid #c8a27c;   /* light oak accent */
+}
+.wwd-card__lead {
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+    font-style: italic;
+    color: #6b6b6b;
+    line-height: 1.5;
+}
+.wwd-card__steps {
+    margin: 0;
+    padding-left: 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    color: #3f3a35;
+}
+.wwd-card__steps li { padding-left: 0.15rem; }
+.wwd-card__steps li::marker {
+    color: #8b4b07;
+    font-weight: 700;
 }
 
 @media (max-width: 520px) {

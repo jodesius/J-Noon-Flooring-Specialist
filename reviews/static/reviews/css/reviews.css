@@ -1,8 +1,8 @@
 /* ============================================================
    Reviews - postcard grid, single postcard, review form.
-   Palette follows core/base.css (wood-flooring theme).
-   The postcard "wood backing" is pure CSS so it can be
-   re-skinned, or replaced with a texture image, per client.
+   Palette follows core/base.css (wood-flooring theme). Postcards
+   are light cards with dark text, matching the home page's
+   "What we do" cards.
    ============================================================ */
 
 :root {
@@ -10,15 +10,17 @@
     --rv-wood-dark:  #5a3b28;
     --rv-wood-mid:   #6f4a30;
     --rv-wood-light: #82593b;
-    --rv-gold:       #f4c430;
-    --rv-card-edge:  #ffffff;
+    --rv-gold:       #e0a500;
+    --rv-accent:     #c8a27c;   /* light oak - card underline */
+    --rv-body-text:  #3f3a35;
+    --rv-muted:      #6b6b6b;
     --rv-page-bg:    #f5efe8;
-
-    /* Texture behind each postcard's text (a floor/carpet the firm has laid). */
-    --rv-postcard-bg: url("https://res.cloudinary.com/ddmslr9na/image/upload/v1788904517/white-city-high-end-carpet_g6394e.webp");
 }
 
 /* ---------- Page shell ---------- */
+.page-reviews {
+    background: var(--rv-page-bg);   /* cream, matches the home "Reviews" section */
+}
 .reviews-page,
 .review-form-wrap {
     max-width: 1100px;
@@ -64,12 +66,12 @@
     overflow: hidden;
     background: #fff;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: 0 10px 26px rgba(60, 40, 25, 0.18);
+    box-shadow: 0 8px 22px rgba(60, 40, 25, 0.12);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .postcard:hover {
     transform: translateY(-3px);
-    box-shadow: 0 16px 34px rgba(60, 40, 25, 0.26);
+    box-shadow: 0 16px 32px rgba(60, 40, 25, 0.2);
 }
 
 .postcard__photo {
@@ -84,62 +86,59 @@
     display: block;
 }
 
-/* Flooring-texture backing + white writing.
-   A dark scrim sits over the photo so the text stays legible; swap
-   --rv-postcard-bg for a different client's flooring image. */
+/* Light card body with dark text - matches the "What we do" cards. */
 .postcard__body {
     position: relative;
     flex: 1;
-    padding: 1.25rem 1.25rem 1.4rem;
-    color: #fff;
-    background-color: var(--rv-wood-dark);
-    background-image:
-        linear-gradient(rgba(38, 24, 15, 0.62), rgba(38, 24, 15, 0.72)),
-        var(--rv-postcard-bg);
-    background-size: cover;
-    background-position: center;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    padding: 1.25rem 1.3rem 1.45rem;
+    background: #fff;
+    color: var(--rv-body-text);
 }
 
 .postcard__stamp {
     margin-bottom: 0.5rem;
 }
 .postcard__headline {
-    margin: 0 0 0.5rem;
+    margin: 0 0 0.6rem;
+    padding-bottom: 0.55rem;
     font-size: 1.15rem;
     line-height: 1.3;
+    color: var(--rv-wood-dark);
+    border-bottom: 2px solid var(--rv-accent);
 }
 .postcard__text {
     margin: 0 0 0.9rem;
     font-size: 0.95rem;
     line-height: 1.55;
-    color: #fdf6ee;
+    color: var(--rv-body-text);
 }
 .postcard__meta {
     margin: 0;
     font-size: 0.85rem;
-    color: #f0e4d6;
+    color: var(--rv-muted);
     font-style: italic;
 }
 
 .postcard__actions {
     display: flex;
-    gap: 0.6rem;
+    gap: 0.9rem;
     margin-top: 1rem;
     padding-top: 0.9rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.25);
+    border-top: 1px solid rgba(0, 0, 0, 0.10);
 }
 .postcard__action {
     font-size: 0.85rem;
-    color: #fff;
+    color: #8b4b07;
     text-decoration: underline;
     text-underline-offset: 2px;
 }
-.postcard__action--danger { color: #ffd9d0; }
+.postcard__action:hover { color: #733d05; }
+.postcard__action--danger { color: #a4291f; }
+.postcard__action--danger:hover { color: #871f17; }
 
 /* ---------- Stars ---------- */
 .stars { letter-spacing: 2px; font-size: 1.05rem; }
-.stars__star { color: rgba(255, 255, 255, 0.45); }
+.stars__star { color: #d9ccbd; }
 .stars__star--on { color: var(--rv-gold); }
 
 /* ---------- Buttons ---------- */
