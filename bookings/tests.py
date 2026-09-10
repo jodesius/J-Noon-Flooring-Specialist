@@ -11,10 +11,12 @@ from django.utils import timezone
 
 from .calendar_sync import CalendarUnavailable
 from .models import (
-    CallRequest, FlooringRate, Invoice, Job, JobPhoto, Payment,
-    QuoteRequest, QuoteSettings,
+    CallRequest, FlooringRate, Invoice, InvoiceLineItem, Job, JobPhoto,
+    Payment, QuoteRequest, QuoteSettings,
 )
-from .quoting import QuotingUnavailable, _sanitise, quoting_available
+from .quoting import (
+    QuotingUnavailable, _preview_response, _sanitise, quoting_available,
+)
 
 User = get_user_model()
 
@@ -257,6 +259,39 @@ class SanitiseTests(TestCase):
         self.assertEqual(out["outcome"], "quote")
 
 
+class PreviewQuoteTests(TestCase):
+    def _qr(self, **extra):
+        kw = dict(
+            service_option=QuoteRequest.Service.SUPPLY_FIT,
+            area_sqm=Decimal("20"), postcode="CM1 1AA", contact_name="X",
+            subfloor_condition=QuoteRequest.Condition.SOUND,
+            removal_needed=QuoteRequest.Removal.NO,
+        )
+        kw.update(extra)
+        return QuoteRequest(**kw)
+
+    def test_no_removal_no_lifting_charge(self):
+        out = _preview_response(self._qr(), final_round=True)
+        self.assertEqual(out["outcome"], "quote")
+        self.assertNotIn(
+            "Lifting the old flooring", [b["label"] for b in out["breakdown"]]
+        )
+        self.assertNotIn("skip or bins", out["customer_message"])
+
+    def test_removal_adds_50_flat_and_a_bins_note(self):
+        base = _preview_response(self._qr(), final_round=True)
+        out = _preview_response(
+            self._qr(removal_needed=QuoteRequest.Removal.YES), final_round=True
+        )
+        self.assertEqual(out["quote_low"] - base["quote_low"], 50)
+        self.assertEqual(out["quote_high"] - base["quote_high"], 50)
+        self.assertIn(
+            {"label": "Lifting the old flooring", "low": 50, "high": 50},
+            out["breakdown"],
+        )
+        self.assertIn("skip or bins", out["customer_message"])
+
+
 @LOCMEM
 class CallRequestTests(TestCase):
     def setUp(self):
@@ -454,7 +489,7 @@ class QuoteToBookingTests(TestCase):
     def test_quote_gets_a_reference(self):
         self.assertRegex(self.quote.reference, r"^JQ\d{4}$")
 
-    def test_result_page_shows_reference_and_book_link(self):
+    def test_result_page_shows_reference_book_and_call_links(self):
         resp = self.client.get(
             reverse("bookings:quote_detail", kwargs={"slug": self.quote.slug})
         )
@@ -462,6 +497,7 @@ class QuoteToBookingTests(TestCase):
         self.assertContains(
             resp, reverse("bookings:book") + "?quote=" + self.quote.reference
         )
+        self.assertContains(resp, reverse("bookings:call"))  # "Get in touch"
 
     def test_book_get_prefills_from_querystring(self):
         resp = self.client.get(
@@ -601,12 +637,24 @@ class JobMoneyTests(TestCase):
 
 class InvoiceTests(TestCase):
     def setUp(self):
+        # Never hit the network for the logo during tests.
+        patcher = patch("bookings.invoices._logo_data", return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
         self.job = Job.objects.create(
             user=make_user(), title="Lounge", agreed_price=Decimal("2000.00"),
         )
         Payment.objects.create(
             job=self.job, amount=Decimal("100.00"), kind=Payment.Kind.BOOKING_FEE
         )
+
+    def _issue(self, kind=Invoice.Kind.FINAL):
+        inv = Invoice(job=self.job, kind=kind)
+        inv.snapshot_from_job()
+        inv.save()
+        inv.ensure_default_line_item()
+        return inv
 
     def test_numbers_are_sequential(self):
         a = Invoice(job=self.job, kind=Invoice.Kind.DEPOSIT)
@@ -631,10 +679,34 @@ class InvoiceTests(TestCase):
         self.assertEqual(inv.total_paid, Decimal("500.00"))
         self.assertEqual(inv.balance, Decimal("1500.00"))
 
+    def test_issue_creates_one_default_line_item(self):
+        inv = self._issue(Invoice.Kind.FINAL)
+        self.assertEqual(inv.line_items.count(), 1)
+        self.assertEqual(inv.line_items.first().amount, Decimal("2000.00"))
+
+    def test_line_items_drive_the_subtotal_and_balance(self):
+        inv = self._issue(Invoice.Kind.FINAL)
+        inv.line_items.all().delete()
+        InvoiceLineItem.objects.create(
+            invoice=inv, description="Supply & fit LVT", amount=Decimal("1500.00")
+        )
+        InvoiceLineItem.objects.create(
+            invoice=inv, description="Lift the old floor", amount=Decimal("50.00")
+        )
+        inv.refresh_from_db()
+        self.assertEqual(inv.agreed_total, Decimal("1550.00"))
+        self.assertEqual(inv.balance, Decimal("1450.00"))  # 1550 - 100 paid
+
+    def test_payments_are_frozen_at_issue(self):
+        inv = self._issue(Invoice.Kind.FINAL)
+        self.assertEqual(len(inv.payments_snapshot), 1)
+        self.assertEqual(inv.payments_snapshot[0]["amount"], "100.00")
+        Payment.objects.create(job=self.job, amount=Decimal("900.00"))
+        inv.refresh_from_db()
+        self.assertEqual(len(inv.payments_snapshot), 1)  # unchanged
+
     def test_pdf_download(self):
-        inv = Invoice(job=self.job, kind=Invoice.Kind.FINAL)
-        inv.snapshot_from_job()
-        inv.save()
+        inv = self._issue(Invoice.Kind.FINAL)
         self.client.force_login(self.job.user)
         resp = self.client.get(reverse(
             "bookings:invoice_pdf",
@@ -643,11 +715,17 @@ class InvoiceTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp["Content-Type"], "application/pdf")
         self.assertTrue(resp.content.startswith(b"%PDF"))
+        self.assertGreater(len(resp.content), 1000)
+
+    def test_pdf_renders_with_a_logo(self):
+        with patch("bookings.invoices._logo_data", return_value=tiny_png().read()):
+            inv = self._issue(Invoice.Kind.DEPOSIT)
+            from bookings.invoices import render_invoice_pdf
+            pdf = render_invoice_pdf(inv)
+        self.assertTrue(pdf.startswith(b"%PDF"))
 
     def test_pdf_denied_to_other_user(self):
-        inv = Invoice(job=self.job, kind=Invoice.Kind.FINAL)
-        inv.snapshot_from_job()
-        inv.save()
+        inv = self._issue(Invoice.Kind.FINAL)
         self.client.force_login(make_user("nope"))
         resp = self.client.get(reverse(
             "bookings:invoice_pdf",
@@ -719,6 +797,34 @@ class StaffManageTests(TestCase):
         resp = self.client.get(self._detail())
         self.assertContains(resp, "Manage this job")
         self.assertContains(resp, "Accept &amp; confirm booking")
+
+    def test_panel_shows_the_linked_quote_price_and_breakdown(self):
+        quote = QuoteRequest.objects.create(
+            user=self.customer, service_option=QuoteRequest.Service.SUPPLY_FIT,
+            postcode="CM1 1AA", contact_name="Cass Customer",
+            flooring_note="LVT", rooms="kitchen",
+            status=QuoteRequest.Status.QUOTED,
+            quote_low=Decimal("1400"), quote_high=Decimal("1700"),
+            ai_result={"breakdown": [
+                {"label": "LVT fitting labour", "low": 900, "high": 1100},
+                {"label": "Lifting the old floor", "low": 50, "high": 50},
+            ]},
+        )
+        job = Job.objects.create(
+            user=self.customer, title="Kitchen LVT", quote_request=quote,
+        )
+        resp = self.client.get(
+            reverse("bookings:project_detail", kwargs={"slug": job.slug})
+        )
+        self.assertContains(resp, quote.reference)
+        self.assertContains(resp, "1400")
+        self.assertContains(resp, "1700")
+        self.assertContains(resp, "LVT fitting labour")
+        self.assertContains(resp, "Lifting the old floor")
+
+    def test_panel_has_no_quote_box_without_a_linked_quote(self):
+        resp = self.client.get(self._detail())  # self.job has no quote_request
+        self.assertNotContains(resp, "From quote")
 
     def test_confirm_booking_from_portal(self):
         resp = self.client.post(self._detail(), {

@@ -9,6 +9,42 @@ Context: job, confirm_form, payment_form, admin_url.
         <span class="job-status job-status--{{ job.status }}">{{ job.get_status_display }}</span>
     </p>
 
+    {% if job.quote_request %}{% with q=job.quote_request %}
+        <div class="staff-panel__brief">
+            <h3>From quote {{ q.reference }}</h3>
+            {% if q.quote_low %}
+                <p class="staff-panel__brief-price">
+                    Online estimate was
+                    <strong>&pound;{{ q.quote_low|floatformat:0 }} &ndash; &pound;{{ q.quote_high|floatformat:0 }}</strong>
+                    <span class="staff-panel__brief-muted">(rough guide &mdash; you set the real price)</span>
+                </p>
+            {% else %}
+                <p class="staff-panel__brief-price">No online figure &mdash; this one was referred to a call.</p>
+            {% endif %}
+            <p class="staff-panel__brief-what">
+                {{ q.get_service_option_display }}{% if q.flooring_system %} &middot; {{ q.flooring_system.name }}{% elif q.flooring_note %} &middot; {{ q.flooring_note }}{% endif %}{% if q.area_sqm %} &middot; {{ q.area_sqm }} m&sup2;{% elif q.area_unknown %} &middot; area not known{% endif %}{% if q.rooms %} &middot; {{ q.rooms }}{% endif %} &middot; {{ q.postcode }}
+            </p>
+            {% if q.breakdown %}
+                <table class="staff-panel__brief-table">
+                    {% for row in q.breakdown %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>&pound;{{ row.low|floatformat:0 }}&ndash;&pound;{{ row.high|floatformat:0 }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% endif %}
+            {% if q.details %}
+                <p class="staff-panel__brief-muted">Their notes on the quote: {{ q.details }}</p>
+            {% endif %}
+            <p><a href="/admin/bookings/quoterequest/{{ q.pk }}/change/">Open the full quote &amp; answers &rarr;</a></p>
+        </div>
+    {% endwith %}{% endif %}
+
+    {% if job.customer_note %}
+        <p class="staff-panel__note"><strong>What they said when booking:</strong> {{ job.customer_note }}</p>
+    {% endif %}
+
     {% if job.status == "requested" %}
         <p>Accept this request: set the price you and the customer agreed and the
            start date. That moves it to <em>Awaiting booking fee</em> in their

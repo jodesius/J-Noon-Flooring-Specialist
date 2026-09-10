@@ -248,6 +248,11 @@
     letter-spacing: 0.04em;
     color: #5a3b28;
 }
+.quote-result__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
 .quote-result__ref-note {
     font-size: 0.85rem;
     color: #6b6b6b;
@@ -447,6 +452,40 @@
 .staff-panel__admin { font-size: 0.9rem; margin: 0; }
 .staff-panel__buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 
+/* the "from quote" briefing box */
+.staff-panel__brief {
+    background: #f6f1ea;
+    border: 1px solid #e4d6c4;
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin: 0 0 1rem;
+}
+.staff-panel__brief h3 {
+    margin: 0 0 0.4rem;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a6b4f;
+}
+.staff-panel__brief p { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.staff-panel__brief p:last-child { margin-bottom: 0; }
+.staff-panel__brief-price strong { font-size: 1.05rem; color: #5a3b28; }
+.staff-panel__brief-muted { color: #6b6b6b; font-size: 0.85rem; }
+.staff-panel__brief-what { color: #3f3a35; }
+.staff-panel__brief-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+}
+.staff-panel__brief-table td {
+    padding: 0.3rem 0;
+    border-top: 1px solid #e4d6c4;
+    color: #3f3a35;
+}
+.staff-panel__brief-table td:last-child { text-align: right; white-space: nowrap; font-weight: 600; }
+.staff-panel__brief-table tr:first-child td { border-top: 0; }
+
 .staff-form { margin-bottom: 1rem; }
 .staff-form__actions { margin-top: 0.5rem; }
 .staff-form--inline {
@@ -519,5 +558,6 @@
 @media (max-width: 520px) {
     .bk-btn { align-self: stretch; text-align: center; }
     .bookings-gate__actions .bk-btn { flex: 1; }
+    .quote-result__actions { flex-direction: column; }
     .job-invoices li { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 }

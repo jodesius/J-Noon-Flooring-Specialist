@@ -51,11 +51,16 @@
             <p class="quote-result__ref">
                 Your quote reference: <strong>{{ qr.reference }}</strong>
             </p>
-            <a class="bk-btn bk-btn--primary"
-               href="{% url 'bookings:book' %}?quote={{ qr.reference }}">Book this job</a>
+            <div class="quote-result__actions">
+                <a class="bk-btn bk-btn--primary"
+                   href="{% url 'bookings:book' %}?quote={{ qr.reference }}">Book this job</a>
+                <a class="bk-btn bk-btn--ghost"
+                   href="{% url 'bookings:call' %}">Get in touch</a>
+            </div>
             <p class="quote-result__ref-note">
-                Happy with this? Book it in and I'll carry your answers over &mdash;
-                no need to fill everything in again.
+                Happy with this? <strong>Book it in</strong> and I'll carry your answers
+                over &mdash; no need to fill everything in again. Prefer a chat first?
+                <strong>Get in touch</strong> and I'll call you back.
             </p>
         </div>
 

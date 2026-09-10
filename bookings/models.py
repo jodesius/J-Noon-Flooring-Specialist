@@ -487,6 +487,10 @@ class Invoice(models.Model):
 
     agreed_total = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     total_paid = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    # Frozen list of the payments this invoice accounts for, captured at issue
+    # so a re-download always shows the same ledger. Each entry:
+    # {"label": str, "method": str, "date": "YYYY-MM-DD", "amount": "123.45"}
+    payments_snapshot = models.JSONField(default=list, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -507,14 +511,78 @@ class Invoice(models.Model):
     def balance(self):
         return self.agreed_total - self.total_paid
 
-    def snapshot_from_job(self):
-        """Fill the money fields from the job as it stands right now."""
-        job = self.job
-        self.agreed_total = job.agreed_price or Decimal("0.00")
+    def _relevant_payments(self):
+        qs = self.job.payments.all()
         if self.kind == self.Kind.DEPOSIT:
-            self.total_paid = sum(
-                (p.amount for p in job.payments.filter(kind=Payment.Kind.BOOKING_FEE)),
-                Decimal("0.00"),
+            qs = qs.filter(kind=Payment.Kind.BOOKING_FEE)
+        return qs.order_by("received_on", "created_at")
+
+    def snapshot_from_job(self):
+        """Freeze the money fields and the payment ledger from the job as it
+        stands right now."""
+        payments = list(self._relevant_payments())
+        self.total_paid = sum((p.amount for p in payments), Decimal("0.00"))
+        self.agreed_total = self.job.agreed_price or Decimal("0.00")
+        self.payments_snapshot = [
+            {
+                "label": p.get_kind_display(),
+                "method": p.get_method_display(),
+                "date": p.received_on.isoformat(),
+                "amount": str(p.amount),
+            }
+            for p in payments
+        ]
+
+    def ensure_default_line_item(self):
+        """Give a freshly issued invoice one sensible line so the PDF is never
+        empty. Joseph can then split / rename it in the admin."""
+        if self.line_items.exists():
+            return
+        if self.kind == self.Kind.DEPOSIT:
+            desc = (
+                "Booking fee to secure your booking - 20% of the "
+                f"£{self.job.agreed_price or 0:,.2f} agreed price, non-refundable "
+                "and deducted from your final invoice"
             )
+            amount = self.total_paid or (self.job.booking_fee or Decimal("0.00"))
         else:
-            self.total_paid = job.total_paid
+            desc = f"{self.job.title} - flooring supplied and fitted as agreed"
+            amount = self.agreed_total
+        self.line_items.create(description=desc, amount=amount)
+
+    def sync_total_from_line_items(self):
+        """Keep `agreed_total` equal to the sum of the line items (so the PDF,
+        the manage panel and the model never disagree). No-op with no items."""
+        items = list(self.line_items.all())
+        if not items:
+            return
+        total = sum((li.amount for li in items), Decimal("0.00"))
+        if total != self.agreed_total:
+            self.agreed_total = total
+            self.save(update_fields=["agreed_total"])
+
+
+class InvoiceLineItem(models.Model):
+    """One itemised line on an invoice - what the customer is paying for."""
+
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.CASCADE, related_name="line_items"
+    )
+    description = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=9, decimal_places=2)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.description} - £{self.amount}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.invoice.sync_total_from_line_items()
+
+    def delete(self, *args, **kwargs):
+        invoice = self.invoice
+        super().delete(*args, **kwargs)
+        invoice.sync_total_from_line_items()

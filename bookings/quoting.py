@@ -98,8 +98,12 @@ look likely; the area is very large (over ~120 m²) or across many rooms; or \
 you are not confident a written range would be within about +/- 35%%.
 - Otherwise return outcome "quote" with quote_low and quote_high (whole \
 pounds), a short breakdown, and the assumptions you made.
-- "customer_message": 2-3 plain sentences for the customer. Always remind them \
-it's a rough estimate subject to a site visit.
+- If the customer wants the old flooring lifted / removed, include the \
+removal charge from the rate card in your figures AND, in customer_message, \
+tell them they must provide their own skip or bins for the waste - we lift \
+and bag the old flooring but do not take it away.
+- "customer_message": 2-4 plain sentences for the customer. Always remind \
+them it's a rough estimate subject to a site visit.
 - "internal_note": one line for the fitter only.
 
 %(rate_card)s
@@ -300,22 +304,34 @@ def _preview_response(qr, final_round):
         }
     area = float(qr.area_sqm or 20)
     rate = 30.0
-    low, high = round(area * rate * 0.85 + 60), round(area * rate * 1.2 + 60)
+    removing = qr.removal_needed in ("yes", "some")
+    removal_fee = 50 if removing else 0
+    low = round(area * rate * 0.85 + 60) + removal_fee
+    high = round(area * rate * 1.2 + 60) + removal_fee
+    breakdown = [
+        {"label": f"Fitting ({area:.0f} m²)", "low": round(area * rate * 0.6), "high": round(area * rate)},
+        {"label": "Prep, underlay, trims, doors", "low": 60, "high": round(area * rate * 0.3 + 60)},
+    ]
+    if removing:
+        breakdown.append({"label": "Lifting the old flooring", "low": 50, "high": 50})
+    message = (
+        f"As a rough guide you're looking at £{low:,}–£{high:,}. "
+        "This is only an estimate and the real figure depends on a site visit. "
+    )
+    if removing:
+        message += ("You'll need to provide your own skip or bins for the old "
+                    "flooring - I lift and bag it but don't take it away. ")
+    message += "(Preview mode - not a real quote.)"
     return {
         "outcome": "quote",
         "questions": [],
         "quote_low": low, "quote_high": high,
-        "breakdown": [
-            {"label": f"Fitting ({area:.0f} m²)", "low": round(area * rate * 0.6), "high": round(area * rate)},
-            {"label": "Prep, underlay, trims, doors", "low": 60, "high": round(area * rate * 0.3 + 60)},
-        ],
+        "breakdown": breakdown,
         "assumptions": [
             f"About {area:.0f} m² across the rooms you listed",
             "Subfloor is sound and needs only minor prep",
             "This is a preview estimate, not a real quote",
         ],
-        "customer_message": f"As a rough guide you're looking at £{low:,}–£{high:,}. "
-        "This is only an estimate and the real figure depends on a site visit. "
-        "(Preview mode - not a real quote.)",
+        "customer_message": message,
         "internal_note": "Preview mode: canned estimate.",
     }

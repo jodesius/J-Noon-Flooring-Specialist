@@ -223,7 +223,12 @@ def book(request):
 
 def _get_owned_job(request, slug):
     """The job at `slug` - for its owner, or for staff organising it."""
-    job = get_object_or_404(Job, slug=slug)
+    job = get_object_or_404(
+        Job.objects.select_related(
+            "user", "quote_request", "quote_request__flooring_system"
+        ),
+        slug=slug,
+    )
     if job.user_id != request.user.id and not request.user.is_site_admin:
         raise Http404
     return job
@@ -335,8 +340,10 @@ def _handle_job_action(request, job):
         invoice = Invoice(job=job, kind=kind)
         invoice.snapshot_from_job()
         invoice.save()
+        invoice.ensure_default_line_item()
         messages.success(
-            request, f"{invoice.get_kind_display()} {invoice.number} created."
+            request, f"{invoice.get_kind_display()} {invoice.number} created "
+            "- add or split the line items in the admin if you want.",
         )
         return
 

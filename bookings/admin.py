@@ -6,8 +6,8 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import (
-    CallRequest, FlooringRate, Invoice, Job, JobPhoto, Payment,
-    QuoteRequest, QuoteSettings,
+    CallRequest, FlooringRate, Invoice, InvoiceLineItem, Job, JobPhoto,
+    Payment, QuoteRequest, QuoteSettings,
 )
 
 
@@ -257,6 +257,7 @@ class JobAdmin(admin.ModelAdmin):
             inv = Invoice(job=job, kind=kind)
             inv.snapshot_from_job()
             inv.save()
+            inv.ensure_default_line_item()
             made.append(inv.number)
         if made:
             self.message_user(request, f"Created {', '.join(made)}.")
@@ -280,6 +281,12 @@ class JobAdmin(admin.ModelAdmin):
             _delete_stored(name)
 
 
+class InvoiceLineItemInline(admin.TabularInline):
+    model = InvoiceLineItem
+    extra = 1
+    fields = ("description", "amount", "sort_order")
+
+
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
     list_display = ("number", "job", "kind", "issued_on", "agreed_total",
@@ -287,7 +294,16 @@ class InvoiceAdmin(admin.ModelAdmin):
     list_filter = ("kind", "issued_on")
     search_fields = ("number", "job__reference", "job__title")
     ordering = ("-created_at",)
-    readonly_fields = ("number", "agreed_total", "total_paid", "created_at")
+    inlines = (InvoiceLineItemInline,)
+    readonly_fields = ("number", "job", "kind", "agreed_total", "total_paid",
+                       "payments_snapshot", "created_at")
+    fieldsets = (
+        (None, {"fields": ("number", "job", "kind", "issued_on")}),
+        ("Itemise the work in the lines below. The subtotal follows their sum.",
+         {"fields": ("agreed_total", "total_paid", "notes")}),
+        ("Frozen at issue", {"fields": ("payments_snapshot", "created_at"),
+                             "classes": ("collapse",)}),
+    )
 
     @admin.display(description="balance")
     def balance_display(self, obj):

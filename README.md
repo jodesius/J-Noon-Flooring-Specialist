@@ -77,7 +77,7 @@ credentials live in the repository.
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map, with OpenStreetMap tiles — no API key |
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
 | Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
-| PDF | `reportlab` — generates the customer portal's downloadable invoices |
+| PDF | `reportlab` — generates the customer portal's downloadable invoices (logo, itemised line-item table, payment ledger) |
 
 Dependencies are pinned in `requirements.txt`.
 
@@ -147,15 +147,21 @@ Dependencies are pinned in `requirements.txt`.
     the admin (`QuoteRequest`, read-only form data + the full AI result +
     an editable status and staff notes).
   - Every quote is given a short **reference** (`JQ####`) shown on the
-    estimate page and a **"Book this job"** button — see the customer portal
-    below.
+    estimate page, with a **"Book this job"** button (→ the customer portal,
+    below) and a **"Get in touch"** button (→ book a call-back).
 - **The rate card is admin data.** `QuoteSettings.rate_card` is a single
   free-text field (seeded with J-Noon's real prices — labour rates, pattern
-  floors, subfloor prep, how materials work for supply & fit); the AI reads
-  it verbatim. `QuoteSettings` also holds a free-text rules box, an
-  estimate-headroom %, and a master on/off switch. `FlooringRate` is just
-  the picklist of systems on the form. The fitter edits the rate card in the
-  admin — no code, no redeploy — and the AI always quotes from it.
+  floors, subfloor prep, a flat **£50 to lift the old flooring**, how
+  materials work for supply & fit); the AI reads it verbatim. `QuoteSettings`
+  also holds a free-text rules box, an estimate-headroom %, and a master
+  on/off switch. `FlooringRate` is just the picklist of systems on the form.
+  The fitter edits the rate card in the admin — no code, no redeploy — and
+  the AI always quotes from it.
+- **Lifting the old floor:** when the customer wants the old flooring taken
+  up, the AI adds the £50 charge *and* tells them in plain words that they
+  need to provide their own skip or bins for the waste — J-Noon lifts and
+  bags it but doesn't take it away (a rule in the system prompt, so it can't
+  be lost from the rate card).
 - **"Please wait" overlay:** submitting the quote form (or the follow-up
   answers) shows a full-screen spinner — *"Your quote is being calculated…
   please don't close or refresh the page"* — and blocks re-submitting while
@@ -204,11 +210,16 @@ Dependencies are pinned in `requirements.txt`.
   another's project.
 - **Joseph runs the whole job from that same portal page.** When a Site
   Administrator opens any customer's project, a **"Manage this job"** panel
-  appears with the stage-appropriate controls (a `POST` from a non-staff
-  user 404s):
-  - *Booking requested* → a form to set the **agreed price**, **start
-    date**, work summary and correct the contact details, then **"Accept &
-    confirm booking"** (→ *Awaiting booking fee*), or decline.
+  appears. It opens with a **briefing box** — if the job came from an online
+  quote it shows that quote's reference, the estimate range, a one-line
+  summary (service / flooring / area / rooms / postcode), the AI breakdown,
+  the customer's notes, and a link to the full quote — plus whatever the
+  customer said when booking. Then the stage-appropriate controls (a `POST`
+  from a non-staff user 404s):
+  - *Booking requested* → a form to set the **agreed price** (with the old
+    quote figure right there to judge against), **start date**, work summary
+    and contact details, then **"Accept & confirm booking"** (→ *Awaiting
+    booking fee*), or decline.
   - *Awaiting booking fee* → **"Confirm £N received"** (pick the method),
     where **N is 20% of the agreed price**, logs the deposit `Payment`,
     which moves the job to **Booked – not started**.
@@ -228,20 +239,30 @@ Dependencies are pinned in `requirements.txt`.
   is **not built yet** (Stripe is the next stage); until then Joseph records
   the fee (and later payments) by hand from the manage panel.
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
-  or a **final invoice**, issued from the manage panel or an admin action;
-  the money figures are **snapshotted at issue** so a downloaded file stays
-  a true record. The header pulls the business phone / email / area from the
-  Contact us settings.
+  or a **final invoice**, issued from the manage panel or an admin action.
+  The letterhead carries the **company logo** (fetched once from Cloudinary,
+  cached, and skipped gracefully if it can't be reached) plus the business
+  phone / email / area from the Contact us settings. The body is a proper
+  **itemised table**: `InvoiceLineItem` rows (one sensible default is
+  created on issue — Joseph can split or rename them in the admin, and the
+  subtotal always follows their sum), then every payment listed as its own
+  line with date and method, then the balance. The line items, the payment
+  ledger and the totals are **frozen at issue** (`payments_snapshot` +
+  `agreed_total` + `total_paid` on the `Invoice`) so a file downloaded today
+  says the same thing next year.
 - **Models** — `Job` (slug, auto reference `JN####`, optional `QuoteRequest`
   link, customer name / phone, address of works, agreed price, start date,
   status, notes; `booking_fee` is a computed 20% of the agreed price),
   `JobPhoto` (Cloudinary-backed, file removed
   from storage on delete), `Payment` (amount, kind, method, date), `Invoice`
-  (auto number `INV-####`, kind, snapshotted totals). `QuoteRequest` gained
-  a `reference` (`JQ####`, assigned on save; a data migration backfilled
-  existing rows). All managed from the `Job` admin page with inlines; `Job`
-  and `Invoice` can't be hand-added (jobs start as a customer request;
-  invoices are created by the issue actions).
+  (auto number `INV-####`, kind, snapshotted totals + payment ledger) with
+  `InvoiceLineItem` children (description, amount — their sum keeps the
+  invoice's `agreed_total` in step). `QuoteRequest` gained a `reference`
+  (`JQ####`, assigned on save; a data migration backfilled existing rows).
+  All managed from the `Job` admin page with inlines; `Job` and `Invoice`
+  can't be hand-added (jobs start as a customer request; invoices are
+  created by the issue actions), but line items are editable on the
+  `Invoice` page.
 
 ### Contact us (`contact`)
 
@@ -645,7 +666,7 @@ J-Flooring-Specialist/
 │   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice
 │   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage/actions, invoice PDF
 │   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits, portal access, money, invoices, staff manage
-│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields, 0006 drop stored booking_fee (now 20% computed)
+│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields, 0006 drop stored booking_fee (now 20% computed), 0007 rate-card £50 lift charge, 0008 invoice line items + payment snapshot
 │   ├── templates/bookings/ # index, quote (+ followup/result/unavailable, _loading_overlay), call, book, projects (+ detail, _staff_panel), manage, emails
 │   └── static/bookings/    # bookings.css, quote-loading.js ("please wait" overlay)
 ├── contact/                # Contact us page - details, coverage map, enquiry form
@@ -899,7 +920,10 @@ from **`/bookings/manage/`** and the customer's own project pages — no
    **photos** from the "Open in admin" link (file upload lives there).
 5. Record further **payments** with the panel's payment form, and **issue a
    booking-fee receipt / final invoice** with its buttons — the customer
-   downloads them as PDFs from their portal.
+   downloads them as PDFs from their portal. Each invoice starts with one
+   line item ("<job title> — flooring work as agreed"); open the invoice in
+   the admin to **split it into itemised lines** (e.g. supply & fit, lifting
+   the old floor, prep) — the subtotal follows their sum.
 
 The **Manage bookings** dashboard lists every job with status filters; you
 can also open any customer's page directly (a banner reminds you you're
@@ -919,7 +943,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **103**, across `core`,
+tests where they add lasting value (currently **111**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -970,12 +994,17 @@ hit from the test suite.
   owner-or-staff only (another user gets a 404, staff see any); a
   booking-fee `Payment` moves a job to *Booked* while a balance payment
   doesn't; invoice numbers are sequential; the deposit snapshot counts only
-  the booking fee and the final one counts everything; the invoice PDF
-  downloads for the owner and 404s for anyone else; `booking_fee` is 20% of
-  the agreed price (and `None` before it's set). For **staff management**:
+  the booking fee and the final one counts everything; issuing an invoice
+  creates one default line item, editing line items drives the subtotal and
+  balance, and the payment ledger is frozen at issue; the invoice PDF
+  downloads for the owner (with and without a logo) and 404s for anyone
+  else; `booking_fee` is 20% of the agreed price (and `None` before it's
+  set). For **staff management**:
   the `/bookings/manage/` dashboard lists every job and filters by status
-  and 404s for a normal user; from a job page a Site Administrator can
-  confirm a booking (price + date required), record the 20% fee (which
+  and 404s for a normal user; the manage panel shows the linked quote's
+  price and breakdown (and nothing when there's no quote); from a job page a
+  Site Administrator can confirm a booking (price + date required), record
+  the 20% fee (which
   books the job in), start and complete it, record a payment and issue an
   invoice; a customer POSTing any of those gets a 404. (Portal photo tests
   use `InMemoryStorage`.)
@@ -994,7 +1023,9 @@ Done end-to-end for every feature so far, most recently:
 - Bookings quote: walked all four outcomes in `QUOTING_PREVIEW` mode (direct
   estimate with breakdown, need-info → follow-up → estimate, refer-to-call,
   and the "book a call" fallback when unconfigured); confirmed the
-  `QuoteRequest` rows and the staff email; checked the signed-out gate.
+  `QuoteRequest` rows and the staff email; checked the signed-out gate;
+  checked the estimate page's **"Get in touch"** button goes to book-a-call
+  and that a "lift the old floor" job shows the £50 line and a bins note.
 - Customer portal: got an estimate, confirmed its `JQ####` reference shows,
   clicked "Book this job" and saw the booking form pre-filled (name, phone,
   postcode, suggested title) with the reference carried; edited the address,
@@ -1006,7 +1037,9 @@ Done end-to-end for every feature so far, most recently:
   each status change but no manage panel;
   recorded a booking-fee payment and watched the job move to *Booked*; added
   a part payment and checked the balance maths; issued a booking-fee receipt
-  and a final invoice and downloaded both PDFs; uploaded work photos in the
+  and a final invoice, split the final into four line items, and downloaded
+  both PDFs — logo top-right, itemised work lines, subtotal, every payment
+  as its own line, balance; uploaded work photos in the
   admin and confirmed they show in the portal; confirmed another account
   gets a 404 on the job and its invoice, and that a superuser sees the
   "viewing as staff" banner.
