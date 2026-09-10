@@ -81,6 +81,7 @@ credentials live in the repository.
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
 | Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
 | PDF | `reportlab` — generates the customer portal's downloadable invoices (logo, itemised line-item table, payment ledger) |
+| Geocoding | postcodes.io (free, no key) — checks a quote's postcode is inside the coverage radius |
 | Payments | Stripe (`stripe` SDK + Stripe.js Elements) for portal card payments — optional, off until the Stripe keys are set; card data goes browser→Stripe, never through Django |
 
 Dependencies are pinned in `requirements.txt`.
@@ -139,14 +140,21 @@ Dependencies are pinned in `requirements.txt`.
 **Get a free quote — `/bookings/quote/`** (`@login_required`)
 
 - A short form (service option, flooring system or free-text, approximate
-  area or "not sure", subfloor type & condition, removal, timescale,
-  postcode, extra details; name/phone prefilled from the profile). On submit
-  it becomes a `QuoteRequest`, then:
-  - Claude reads the answers plus the **rate card** and returns either
-    **up to 4 follow-up questions** (rendered on a `/bookings/quote/<uuid>/`
-    page), **a rough £ range** with a breakdown and its assumptions, or a
-    **"we'll call you"** for anything it shouldn't price blind (repairs,
-    damaged subfloor, very large or uncertain jobs).
+  area or "not sure", subfloor type & condition, removal, **beading** and
+  **door-trim count**, timescale, postcode, extra details; name/phone
+  prefilled from the profile). On submit it becomes a `QuoteRequest`, then:
+  - **Coverage check first.** The postcode is geocoded (postcodes.io, free,
+    no key) and its straight-line distance from Chelmsford town centre is
+    measured against the coverage radius (`SiteContact.radius_miles` + a
+    2-mile tolerance — the same figure the Contact-page map draws). If it's
+    clearly outside, the customer gets a **polite decline** ("a bit too far
+    for me to take on") and no AI call is made. A bad or unrecognised
+    postcode, or the API being down, just carries on as normal.
+  - Otherwise Claude reads the answers plus the **rate card** and returns
+    either **up to 4 follow-up questions** (rendered on a
+    `/bookings/quote/<uuid>/` page), **a rough £ range** with a breakdown and
+    its assumptions, or a **"we'll call you"** for anything it shouldn't
+    price blind (repairs, damaged subfloor, very large or uncertain jobs).
   - The business gets an **email** for every request; all requests show in
     the admin (`QuoteRequest`, read-only form data + the full AI result +
     an editable status and staff notes).
@@ -155,8 +163,9 @@ Dependencies are pinned in `requirements.txt`.
     below) and a **"Get in touch"** button (→ book a call-back).
 - **The rate card is admin data.** `QuoteSettings.rate_card` is a single
   free-text field (seeded with J-Noon's real prices — labour rates, pattern
-  floors, subfloor prep, a flat **£50 to lift the old flooring**, how
-  materials work for supply & fit); the AI reads it verbatim. `QuoteSettings`
+  floors, subfloor prep, a flat **£50 to lift the old flooring**, **£1/m
+  beading** and **£5 per door trim**, how materials work for supply & fit);
+  the AI reads it verbatim. `QuoteSettings`
   also holds a free-text rules box, an estimate-headroom %, and a master
   on/off switch. `FlooringRate` is just the picklist of systems on the form.
   The fitter edits the rate card in the admin — no code, no redeploy — and
@@ -166,6 +175,11 @@ Dependencies are pinned in `requirements.txt`.
   need to provide their own skip or bins for the waste — J-Noon lifts and
   bags it but doesn't take it away (a rule in the system prompt, so it can't
   be lost from the rate card).
+- **Beading & door trims:** the quote form asks whether the customer wants
+  beading (yes / no / not sure) and how many doorway threshold bars (a
+  number, or blank). The AI adds £1/m beading — estimating the perimeter
+  from the area when it has to — and £5 per door bar, using the given count
+  or assuming one per room, and notes what it assumed.
 - **"Please wait" overlay:** submitting the quote form (or the follow-up
   answers) shows a full-screen spinner — *"Your quote is being calculated…
   please don't close or refresh the page"* — and blocks re-submitting while
@@ -697,6 +711,7 @@ J-Flooring-Specialist/
 ├── bookings/               # bookings landing + AI quote + call-back + portal
 │   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, Payment, Invoice, InvoiceLineItem, CardPayment
 │   ├── quoting.py          # rate card -> Claude -> parsed/validated estimate
+│   ├── coverage.py         # postcode -> distance from Chelmsford (postcodes.io)
 │   ├── calendar_sync.py    # CallRequest -> Google Calendar event (service account)
 │   ├── invoices.py         # Invoice -> PDF (reportlab)
 │   ├── payments.py         # Stripe: PaymentIntent create / retrieve / webhook verify
@@ -704,7 +719,7 @@ J-Flooring-Specialist/
 │   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice/CardPayment
 │   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage, invoice PDF, Stripe checkout + webhook
 │   ├── tests.py            # gates, flows (mocked AI / calendar / Stripe), sanity check, limits, portal access, money, invoices, staff manage, card payments
-│   ├── migrations/         # 0001..0006 (quote/call/job/invoice/fee), 0007 rate-card £50 lift charge, 0008 invoice line items + payment snapshot, 0009 CardPayment, 0010 auto-invoice link + receipt kind
+│   ├── migrations/         # 0001..0006 (quote/call/job/invoice/fee), 0007 rate-card £50 lift charge, 0008 invoice line items + payment snapshot, 0009 CardPayment, 0010 auto-invoice link + receipt kind, 0011 rate-card beading + door trims, 0012 quote-form beading + door-trim fields, 0013 out-of-area quote status
 │   ├── templates/bookings/ # index, quote (+ followup/result/unavailable, _loading_overlay), call, book, projects (+ detail, _staff_panel), manage, checkout (+ pay_choose, checkout_return), emails (quote / call / job / payment)
 │   └── static/bookings/    # bookings.css, quote-loading.js, checkout.js (Stripe Elements)
 ├── contact/                # Contact us page - details, coverage map, enquiry form
@@ -1021,7 +1036,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **131**, across `core`,
+tests where they add lasting value (currently **144**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -1056,7 +1071,10 @@ hit from the test suite.
   when quoting isn't configured; a valid submission creates a `QuoteRequest`
   and emails the business; the **need-info → follow-up → quote** path works;
   a `QuotingUnavailable` falls back to "we'll call you"; the sanity check
-  downgrades an implausible AI quote; and — for call-backs — a booking saves
+  downgrades an implausible AI quote; a postcode far from Chelmsford is
+  geocoded (HTTP mocked) and **declined out of area** before any AI call,
+  while a local or unrecognisable postcode carries on; and — for call-backs
+  — a booking saves
   a `CallRequest`, creates a calendar event and emails; it still works when
   the calendar isn't configured; past dates, the honeypot and the daily
   limits are all rejected; one user can't open another's quote. For the
@@ -1115,7 +1133,12 @@ Done end-to-end for every feature so far, most recently:
   and the "book a call" fallback when unconfigured); confirmed the
   `QuoteRequest` rows and the staff email; checked the signed-out gate;
   checked the estimate page's **"Get in touch"** button goes to book-a-call
-  and that a "lift the old floor" job shows the £50 line and a bins note.
+  and that a "lift the old floor" job shows the £50 line and a bins note,
+  and that beading + door trims land in the breakdown. Ran the real
+  postcodes.io coverage check against a spread of postcodes — Chelmsford,
+  Colchester, Southend and Romford came back *in*; central London (~31 mi)
+  and Norwich (~71 mi) came back *out*; and the decline page renders with no
+  "book" / "call" CTA.
 - Customer portal: got an estimate, confirmed its `JQ####` reference shows,
   clicked "Book this job" and saw the booking form pre-filled (name, phone,
   postcode, suggested title) with the reference carried; edited the address,

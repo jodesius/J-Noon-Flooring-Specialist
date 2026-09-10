@@ -94,6 +94,8 @@ def _run_quoting(request, qr, final_round=False):
         qr.quote_low = result.get("quote_low")
         qr.quote_high = result.get("quote_high")
         qr.status = QuoteRequest.Status.QUOTED
+    elif outcome == "out_of_area":
+        qr.status = QuoteRequest.Status.OUT_OF_AREA
     else:  # refer_to_call, or need_info on the final round
         qr.status = QuoteRequest.Status.CALL_REQUESTED
     qr.save()

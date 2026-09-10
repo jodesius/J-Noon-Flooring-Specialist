@@ -1,6 +1,8 @@
+import io
+import json
 from decimal import Decimal
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -65,6 +67,7 @@ def base_payload(**extra):
         "subfloor_type": QuoteRequest.Subfloor.CONCRETE,
         "subfloor_condition": QuoteRequest.Condition.SOUND,
         "removal_needed": QuoteRequest.Removal.YES,
+        "beading_wanted": QuoteRequest.Beading.YES,
         "timescale": QuoteRequest.Timescale.SOON,
         "postcode": "CM1 1AA",
         "details": "",
@@ -184,6 +187,21 @@ class QuoteFlowTests(TestCase):
         page = self.client.get(resp["Location"])
         self.assertContains(page, "give you a call")
 
+    @patch("bookings.views.generate_quote", return_value={
+        "outcome": "out_of_area", "quote_low": None, "quote_high": None,
+        "questions": [], "breakdown": [], "assumptions": [],
+        "customer_message": "You're about 40 miles from Chelmsford - too far, sorry.",
+        "internal_note": "Out of area.",
+    })
+    def test_out_of_area_is_declined(self, _mock):
+        resp = self._post()
+        qr = QuoteRequest.objects.get()
+        self.assertEqual(qr.status, QuoteRequest.Status.OUT_OF_AREA)
+        page = self.client.get(resp["Location"])
+        self.assertContains(page, "too far")
+        self.assertNotContains(page, "Book this job")
+        self.assertNotContains(page, "quote reference")
+
     @patch("bookings.views.generate_quote")
     def test_honeypot_blocks(self, mock_gen):
         resp = self._post(website="http://spam.example")
@@ -290,6 +308,112 @@ class PreviewQuoteTests(TestCase):
             out["breakdown"],
         )
         self.assertIn("skip or bins", out["customer_message"])
+
+    def test_preview_includes_beading_and_door_trims(self):
+        out = _preview_response(self._qr(), final_round=True)
+        self.assertIn(
+            "Beading & door trims", [b["label"] for b in out["breakdown"]]
+        )
+
+    def test_no_finishing_line_when_none_wanted(self):
+        out = _preview_response(
+            self._qr(beading_wanted="no", door_trims=0), final_round=True
+        )
+        self.assertNotIn(
+            "Beading & door trims", [b["label"] for b in out["breakdown"]]
+        )
+
+    def test_door_trim_count_drives_the_charge(self):
+        one = _preview_response(
+            self._qr(beading_wanted="no", door_trims=1), final_round=True
+        )
+        five = _preview_response(
+            self._qr(beading_wanted="no", door_trims=5), final_round=True
+        )
+        self.assertEqual(five["quote_low"] - one["quote_low"], 20)  # 4 x £5
+
+    def test_customer_summary_lists_finishing_answers(self):
+        from bookings.quoting import build_customer_summary
+
+        s = build_customer_summary(self._qr(beading_wanted="yes", door_trims=3))
+        self.assertIn("Beading wanted: Yes please", s)
+        self.assertIn("Doorway threshold bars: 3", s)
+
+
+class CoverageTests(TestCase):
+    def _urlopen_returning(self, payload):
+        m = MagicMock()
+        m.__enter__.return_value = io.BytesIO(json.dumps(payload).encode())
+        m.__exit__.return_value = False
+        return m
+
+    @patch("bookings.coverage.urllib.request.urlopen")
+    def test_postcode_point_parses_lat_lng(self, mock_open):
+        mock_open.return_value = self._urlopen_returning(
+            {"result": {"latitude": 51.74, "longitude": 0.47}}
+        )
+        from bookings.coverage import postcode_point
+
+        self.assertEqual(postcode_point("CM1 1AA"), (51.74, 0.47))
+
+    @patch("bookings.coverage.urllib.request.urlopen", side_effect=OSError("boom"))
+    def test_postcode_point_is_none_on_error(self, _mock):
+        from bookings.coverage import postcode_point
+
+        self.assertIsNone(postcode_point("CM1 1AA"))
+
+    @patch("bookings.coverage.postcode_point", return_value=(51.744, 0.472))
+    def test_local_postcode_is_in_area(self, _mock):
+        from bookings.coverage import coverage_status
+
+        status, distance = coverage_status("CM1 1AA")
+        self.assertEqual(status, "in")
+        self.assertLess(distance, 5)
+
+    @patch("bookings.coverage.postcode_point", return_value=(50.8225, -0.1372))  # Brighton
+    def test_far_postcode_is_out_of_area(self, _mock):
+        from bookings.coverage import coverage_status
+
+        status, distance = coverage_status("BN1 1AA")
+        self.assertEqual(status, "out")
+        self.assertGreater(distance, 25)
+
+    @patch("bookings.coverage.postcode_point", return_value=None)
+    def test_unknown_when_the_lookup_fails(self, _mock):
+        from bookings.coverage import coverage_status
+
+        self.assertEqual(coverage_status("ZZ1 1ZZ"), ("unknown", None))
+
+
+class OutOfAreaQuoteTests(TestCase):
+    def _qr(self, postcode="XX1 1XX"):
+        return QuoteRequest(
+            service_option=QuoteRequest.Service.SUPPLY_FIT,
+            area_sqm=Decimal("20"), postcode=postcode, contact_name="X",
+            beading_wanted="unknown",
+        )
+
+    @patch("bookings.quoting.coverage_status", return_value=("out", 42.0))
+    def test_out_of_area_returns_a_polite_decline(self, _mock):
+        from bookings.quoting import _out_of_area_response
+
+        out = _out_of_area_response(self._qr())
+        self.assertEqual(out["outcome"], "out_of_area")
+        self.assertIsNone(out["quote_low"])
+        self.assertIn("42", out["customer_message"])
+        self.assertIn("too far", out["customer_message"])
+
+    @patch("bookings.quoting.coverage_status", return_value=("in", 8.0))
+    def test_in_area_carries_on(self, _mock):
+        from bookings.quoting import _out_of_area_response
+
+        self.assertIsNone(_out_of_area_response(self._qr()))
+
+    @patch("bookings.quoting.coverage_status", return_value=("unknown", None))
+    def test_uncheckable_postcode_carries_on(self, _mock):
+        from bookings.quoting import _out_of_area_response
+
+        self.assertIsNone(_out_of_area_response(self._qr()))
 
 
 @LOCMEM

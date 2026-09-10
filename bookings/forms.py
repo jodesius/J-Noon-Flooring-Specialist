@@ -16,6 +16,7 @@ class QuoteStartForm(forms.ModelForm):
             "service_option", "flooring_system", "flooring_note",
             "area_sqm", "area_unknown", "rooms", "current_covering",
             "subfloor_type", "subfloor_condition", "removal_needed",
+            "beading_wanted", "door_trims",
             "timescale", "postcode", "details",
             "contact_name", "contact_phone",
         ]
@@ -30,6 +31,7 @@ class QuoteStartForm(forms.ModelForm):
             "current_covering": forms.TextInput(
                 attrs={"placeholder": "e.g. old carpet, tiles, bare boards"}
             ),
+            "door_trims": forms.NumberInput(attrs={"min": 0, "placeholder": "e.g. 3"}),
             "details": forms.Textarea(attrs={"rows": 4}),
         }
         labels = {
@@ -41,6 +43,8 @@ class QuoteStartForm(forms.ModelForm):
             "subfloor_type": "What's under the current floor?",
             "subfloor_condition": "How does the floor seem?",
             "removal_needed": "Does the old flooring need lifting?",
+            "beading_wanted": "Beading around the edges?",
+            "door_trims": "Doorway threshold bars",
             "details": "Anything else that helps",
             "contact_name": "Your name",
             "contact_phone": "Phone (optional)",
@@ -61,6 +65,15 @@ class QuoteStartForm(forms.ModelForm):
             "Only if you're not sure which system - roughly what are you after?"
         )
         self.fields["area_sqm"].help_text = "A rough length x width of each room is fine."
+        self.fields["beading_wanted"].help_text = (
+            "The trim that covers the gap where a hard floor meets the skirting - "
+            "£1 per metre. Most laminate / LVT / wood floors need it."
+        )
+        self.fields["door_trims"].required = False
+        self.fields["door_trims"].help_text = (
+            "£5 each. Roughly how many doorways into these rooms? "
+            "Leave blank and I'll estimate."
+        )
         self.fields["details"].help_text = (
             "Access, awkward corners, deadlines, anything unusual."
         )

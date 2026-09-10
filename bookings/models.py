@@ -101,6 +101,11 @@ class QuoteRequest(models.Model):
         NO = "no", "No"
         UNKNOWN = "unknown", "Not sure"
 
+    class Beading(models.TextChoices):
+        YES = "yes", "Yes please"
+        NO = "no", "No thanks"
+        UNKNOWN = "unknown", "Not sure - advise me"
+
     class Timescale(models.TextChoices):
         ASAP = "asap", "As soon as possible"
         SOON = "soon", "Within a month or so"
@@ -111,6 +116,7 @@ class QuoteRequest(models.Model):
         AWAITING_INFO = "awaiting_info", "Awaiting customer answers"
         QUOTED = "quoted", "Estimate given"
         CALL_REQUESTED = "call_requested", "Needs a call"
+        OUT_OF_AREA = "out_of_area", "Outside coverage area"
         REVIEWED = "reviewed", "Reviewed by staff"
 
     slug = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -143,6 +149,10 @@ class QuoteRequest(models.Model):
     removal_needed = models.CharField(
         max_length=20, choices=Removal.choices, default=Removal.UNKNOWN
     )
+    beading_wanted = models.CharField(
+        max_length=10, choices=Beading.choices, default=Beading.UNKNOWN
+    )
+    door_trims = models.PositiveSmallIntegerField(null=True, blank=True)
     timescale = models.CharField(
         max_length=20, choices=Timescale.choices, default=Timescale.SOON
     )

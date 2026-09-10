@@ -89,7 +89,8 @@ class QuoteRequestAdmin(admin.ModelAdmin):
         "reference", "user", "created_at", "updated_at", "slug",
         "service_option", "flooring_system", "flooring_note",
         "area_sqm", "area_unknown", "rooms", "current_covering",
-        "subfloor_type", "subfloor_condition", "removal_needed", "timescale",
+        "subfloor_type", "subfloor_condition", "removal_needed",
+        "beading_wanted", "door_trims", "timescale",
         "postcode", "details", "contact_name", "contact_phone",
         "ai_questions", "ai_answers", "ai_result_pretty",
         "quote_low", "quote_high",
@@ -101,6 +102,7 @@ class QuoteRequestAdmin(admin.ModelAdmin):
             "fields": ("service_option", "flooring_system", "flooring_note",
                        "area_sqm", "area_unknown", "rooms", "current_covering",
                        "subfloor_type", "subfloor_condition", "removal_needed",
+                       "beading_wanted", "door_trims",
                        "timescale", "details"),
         }),
         ("AI estimate", {

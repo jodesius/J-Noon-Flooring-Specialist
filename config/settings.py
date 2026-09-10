@@ -271,6 +271,11 @@ GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 BOOKINGS_TIMEZONE = os.environ.get("BOOKINGS_TIMEZONE", "Europe/London")
 CALL_DAILY_LIMIT = int(os.environ.get("CALL_DAILY_LIMIT", "3"))
 
+# Centre of the coverage area (Chelmsford town centre) - the quoting engine
+# geocodes a customer's postcode and declines anything beyond the radius set
+# in the admin (SiteContact.radius_miles). Matches the Contact-page map.
+BOOKINGS_COVERAGE_CENTRE = (51.7356, 0.4685)
+
 
 # Customer portal ("Your projects")
 # How many booking requests one signed-in user may send per day.

@@ -64,6 +64,21 @@
             </p>
         </div>
 
+    {% elif qr.status == "out_of_area" %}
+        <header class="bookings-page__head">
+            <h1>Sorry &mdash; you're a bit too far</h1>
+        </header>
+        <div class="bookings-card quote-result">
+            <p class="quote-result__message">
+                {{ qr.customer_message|default:"Your postcode is outside the area I cover from Chelmsford, so I'm not able to take this one on. Sorry I can't help this time." }}
+            </p>
+            <p class="bk-form__disclaimer">
+                If your postcode isn't quite right, or you reckon you're close enough
+                to the line, <a href="{% url 'contact:index' %}">drop me a message</a>
+                and I'll take a look.
+            </p>
+        </div>
+
     {% else %}
         <header class="bookings-page__head">
             <h1>Thanks &mdash; I'll give you a call</h1>

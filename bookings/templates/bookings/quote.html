@@ -49,6 +49,12 @@
             </fieldset>
 
             <fieldset class="bk-form__group">
+                <legend>Finishing</legend>
+                {% include "bookings/_field.html" with field=form.beading_wanted %}
+                {% include "bookings/_field.html" with field=form.door_trims %}
+            </fieldset>
+
+            <fieldset class="bk-form__group">
                 <legend>You &amp; the job</legend>
                 {% include "bookings/_field.html" with field=form.timescale %}
                 {% include "bookings/_field.html" with field=form.postcode %}

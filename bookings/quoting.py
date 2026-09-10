@@ -23,6 +23,7 @@ import logging
 
 from django.conf import settings
 
+from .coverage import coverage_radius, coverage_status
 from .models import FlooringRate, QuoteRequest, QuoteSettings
 
 logger = logging.getLogger(__name__)
@@ -80,7 +81,8 @@ only; every job is confirmed with a site visit and nothing you say is binding.
 
 You are given a rate card and a customer's answers. Work out a sensible price \
 RANGE in pounds: area x the relevant labour rate, plus any subfloor prep, plus \
-materials when it's a supply & fit job.
+finishing (beading, door trims) where the floor type needs it, plus materials \
+when it's a supply & fit job.
 
 Rules:
 - Work only from the rate card below. Never invent rates. If a needed figure \
@@ -160,6 +162,13 @@ def build_customer_summary(qr, final_round=False):
         f"- Subfloor type: {qr.get_subfloor_type_display()}",
         f"- Subfloor condition: {qr.get_subfloor_condition_display()}",
         f"- Remove old flooring: {qr.get_removal_needed_display()}",
+        f"- Beading wanted: {qr.get_beading_wanted_display()}",
+    ]
+    if qr.door_trims is not None:
+        lines.append(f"- Doorway threshold bars: {qr.door_trims}")
+    else:
+        lines.append("- Doorway threshold bars: not specified (estimate one per room)")
+    lines += [
         f"- Timescale: {qr.get_timescale_display()}",
         f"- Postcode: {qr.postcode}",
     ]
@@ -183,9 +192,37 @@ def build_customer_summary(qr, final_round=False):
 # The call
 # --------------------------------------------------------------------------
 
+def _out_of_area_response(qr):
+    """A polite decline when the postcode is clearly outside the coverage
+    area. Returns None (carry on) when it's inside or can't be checked."""
+    status, distance = coverage_status(qr.postcode)
+    if status != "out":
+        return None
+    return {
+        "outcome": "out_of_area",
+        "questions": [], "breakdown": [], "assumptions": [],
+        "quote_low": None, "quote_high": None,
+        "distance_miles": distance,
+        "customer_message": (
+            "Thanks for the details. Your postcode looks to be about "
+            f"{distance:.0f} miles from Chelmsford, and I only work within "
+            f"roughly {coverage_radius()} miles - so this one's a bit too far "
+            "for me to take on. Sorry I can't help this time."
+        ),
+        "internal_note": (
+            f"Out of area - ~{distance:.0f} mi from Chelmsford. Politely declined."
+        ),
+    }
+
+
 def generate_quote(qr, final_round=False):
     if not rate_card_ready():
         raise QuotingUnavailable("rate card not ready")
+
+    if not final_round:
+        out_of_area = _out_of_area_response(qr)
+        if out_of_area is not None:
+            return out_of_area
 
     if settings.QUOTING_PREVIEW and not settings.ANTHROPIC_API_KEY:
         return _preview_response(qr, final_round)
@@ -306,12 +343,20 @@ def _preview_response(qr, final_round):
     rate = 30.0
     removing = qr.removal_needed in ("yes", "some")
     removal_fee = 50 if removing else 0
-    low = round(area * rate * 0.85 + 60) + removal_fee
-    high = round(area * rate * 1.2 + 60) + removal_fee
+    # beading (~perimeter x £1) + door bars (£5 each)
+    beading = 0 if qr.beading_wanted == "no" else round(4 * area ** 0.5)
+    doors = qr.door_trims if qr.door_trims is not None else 2
+    finishing = beading + doors * 5
+    low = round(area * rate * 0.85 + 40) + removal_fee + finishing
+    high = round(area * rate * 1.2 + 40) + removal_fee + finishing
     breakdown = [
         {"label": f"Fitting ({area:.0f} m²)", "low": round(area * rate * 0.6), "high": round(area * rate)},
-        {"label": "Prep, underlay, trims, doors", "low": 60, "high": round(area * rate * 0.3 + 60)},
+        {"label": "Prep, underlay, thresholds", "low": 40, "high": round(area * rate * 0.3 + 40)},
     ]
+    if finishing:
+        breakdown.append(
+            {"label": "Beading & door trims", "low": finishing, "high": finishing}
+        )
     if removing:
         breakdown.append({"label": "Lifting the old flooring", "low": 50, "high": 50})
     message = (
@@ -330,6 +375,9 @@ def _preview_response(qr, final_round):
         "assumptions": [
             f"About {area:.0f} m² across the rooms you listed",
             "Subfloor is sound and needs only minor prep",
+            (f"{doors} door threshold bar(s)" if qr.door_trims is not None
+             else "One door threshold bar per room")
+            + ("" if qr.beading_wanted == "no" else ", plus beading around the perimeter"),
             "This is a preview estimate, not a real quote",
         ],
         "customer_message": message,
