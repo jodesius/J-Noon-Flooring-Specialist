@@ -1,0 +1,13 @@
+New enquiry via the J-Noon Flooring Specialist website.
+
+Name:     {{ enquiry.name }}
+Email:    {{ enquiry.email }}
+Phone:    {{ enquiry.phone|default:"(not given)" }}
+Postcode: {{ enquiry.postcode|default:"(not given)" }}
+
+Message:
+{{ enquiry.message }}
+
+--
+Received {{ enquiry.created_at }}.
+Reply straight to this email to get back to them.

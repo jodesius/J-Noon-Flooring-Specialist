@@ -34,9 +34,10 @@ firms with only branding, content and configuration changes.
 A multi-page Django site with:
 
 - A built-out **home page** (hero, about, a live "Reviews" strip, a
-  "How we work" section, and a "What we do" section) and a **work gallery**
-  (filterable masonry grid + lightbox, photos managed in the admin).
-  Bookings and Contact are still placeholders being built out.
+  "How we work" section, and a "What we do" section), a **work gallery**
+  (filterable masonry grid + lightbox, photos managed in the admin), and a
+  **Contact us** page (admin-managed details, coverage map, enquiry form).
+  Bookings is still a placeholder being built out.
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -64,7 +65,7 @@ credentials live in the repository.
 | Images | Pillow (upload validation) |
 | Media storage | Cloudinary (`django-cloudinary-storage`); local `media/` folder when unconfigured |
 | Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
-| Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step |
+| Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map, with OpenStreetMap tiles — no API key |
 
 Dependencies are pinned in `requirements.txt`.
 
@@ -97,8 +98,29 @@ Dependencies are pinned in `requirements.txt`.
   Tiles, Screeding & Floor Prep), each with a one-line summary and a
   numbered "order of works". All static content for now; images can be
   added later.
-- `bookings` and `contact` are wired routes with placeholder content, ready
-  to be built out.
+- `bookings` is a wired route with placeholder content, ready to be built
+  out.
+
+### Contact us (`contact`)
+
+- **`SiteContact`** — a single admin-editable record (photo, personal
+  intro, phone, email, enquiry recipient, coverage radius, service-area
+  town list, response-time line, social links). The page reads it, so the
+  business can change any of it without a code change. A placeholder image
+  stands in until a real photo is uploaded.
+- **Coverage map** — Leaflet + OpenStreetMap (no API key, no billing),
+  centred on Chelmsford town centre with a shaded circle at the coverage
+  radius and a marker. Leaflet loads from cdnjs; OSM serves the tiles.
+- **Enquiry form** — name, email, phone, postcode, message. On submit the
+  message is **saved as a `ContactEnquiry`** *and* emailed to the business
+  (`reply-to` set to the sender). Email failure is swallowed — the enquiry
+  is still captured. A **honeypot field** (hidden from people) blocks the
+  common spam bots.
+- **No street address** anywhere on the site — a mobile trade doesn't need
+  one, and it keeps a home address private. The page shows "Based in
+  Chelmsford · N-mile radius" instead.
+- Staff see enquiries in the admin (`ContactEnquiry`, read-only, with a
+  *handled* toggle); they can't be created there.
 - **Custom 404 page** (`core/templates/404.html`): on-theme "page not found"
   with an explanation of the URL error and a link back home. Django serves
   it automatically for any unmatched URL when `DEBUG = False` (in local dev
@@ -220,6 +242,10 @@ Three access tiers, using Django's built-in auth:
 - **Gallery photos** are managed in the admin: `GalleryImage` (with a
   thumbnail preview, inline `category` / `is_published` / `sort_order`
   editing) and `Category`.
+- **Contact us** is admin-driven: `SiteContact` (a single row — the
+  business details and photo shown on the page) and `ContactEnquiry`
+  (read-only list of messages sent through the form, with a *handled*
+  toggle).
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
   every permission for the project's own apps and **none** for Django's
@@ -339,26 +365,33 @@ today, grouped by concern:
   password-reset email that contains no user input.
 - **Cross-site request forgery (CSRF)**: `CsrfViewMiddleware` is enabled and
   every state-changing form (`register`, `login`, `logout`, `profile`,
-  password reset, and review create / edit / delete) submits a
-  `{% csrf_token %}`. Review delete is POST-only with a confirmation page.
+  password reset, review create / edit / delete, and the contact enquiry
+  form) submits a `{% csrf_token %}`. Review delete is POST-only with a
+  confirmation page.
+- **Contact form spam**: a honeypot field (present in the DOM, hidden from
+  people with CSS) — a filled-in honeypot fails validation, so the message
+  is never saved or emailed. Enquiry text is length-capped and rendered
+  through auto-escaping; the notification email is plain text.
 - **Mass assignment**: forms declare an explicit field list; the profile
   form separates the editable `username` from account-security concerns.
 - Request body size is capped (`DATA_UPLOAD_MAX_MEMORY_SIZE`,
   `FILE_UPLOAD_MAX_MEMORY_SIZE`).
 
-### File uploads (profile images, review photos, gallery photos)
+### File uploads (profile images, review photos, gallery photos, contact photo)
 
 - **Type is verified by parsing the file with Pillow**, not by trusting the
   file extension or the browser-supplied content type. Profile images accept
-  real PNG / JPEG only; review and gallery photos accept real JPEG / PNG /
-  WebP only. A renamed `.png`, a BMP, a GIF, or a text file are all rejected.
-- Hard size limit checked **before** the file is parsed: **1 MB** for
-  profile images, **4 MB** for review photos, **10 MB** for gallery photos.
+  real PNG / JPEG only; review, gallery and contact photos accept real JPEG
+  / PNG / WebP only. A renamed `.png`, a BMP, a GIF, or a text file are all
+  rejected.
+- Hard size limit checked **before** the file is parsed: **1 MB** profile,
+  **4 MB** review, **10 MB** gallery, **3 MB** contact photo.
 - Stored under a random UUID name
-  (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`, `.../reviews/<uuid>`, or
-  `.../gallery/<uuid>`), so the path exposes no user identifier and images
-  cannot be enumerated. Uploads go to Cloudinary (served from its CDN); the
-  local `media/` folder is the fallback when Cloudinary is not configured.
+  (`<CLOUDINARY_FOLDER>/profile_images/<uuid>`, `.../reviews/<uuid>`,
+  `.../gallery/<uuid>`, `.../contact/<uuid>`), so the path exposes no user
+  identifier and images cannot be enumerated. Uploads go to Cloudinary
+  (served from its CDN); the local `media/` folder is the fallback when
+  Cloudinary is not configured.
 - Replacing an image just means uploading a new one — there is no "delete"
   control on the profile or review forms.
 - Profile images have a client-side pre-check and live preview for fast
@@ -442,7 +475,16 @@ J-Flooring-Specialist/
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
 ├── bookings/               # bookings (placeholder route)
-├── contact/                # contact (placeholder route)
+├── contact/                # Contact us page - details, coverage map, enquiry form
+│   ├── models.py           # SiteContact (singleton), ContactEnquiry
+│   ├── forms.py            # EnquiryForm (+ honeypot)
+│   ├── validators.py       # contact-photo validation (Pillow, 3 MB)
+│   ├── admin.py            # SiteContact + read-only ContactEnquiry
+│   ├── views.py            # render page + handle enquiry (save + email)
+│   ├── tests.py            # page, singleton, form save/email/honeypot
+│   ├── migrations/
+│   ├── templates/contact/  # index.html + enquiry email templates
+│   └── static/contact/     # contact.css, contact.js (Leaflet map)
 ├── manage.py
 ├── requirements.txt
 ├── .env.example
@@ -585,9 +627,9 @@ from a domain you own and authenticate (SPF, DKIM, DMARC) — see the roadmap.
 
 ## Media storage
 
-User uploads (profile images, review photos and gallery photos) go to
-**Cloudinary** when `CLOUDINARY_URL` is set, otherwise to the local `media/`
-folder.
+User uploads (profile images, review photos, gallery photos and the contact
+photo) go to **Cloudinary** when `CLOUDINARY_URL` is set, otherwise to the
+local `media/` folder.
 
 1. Create a free account at <https://cloudinary.com>.
 2. On the dashboard, copy the whole **API environment variable** —
@@ -615,10 +657,11 @@ stragglers out of Cloudinary.
 python manage.py test           # whole suite
 python manage.py test reviews    # just the reviews app
 python manage.py test gallery    # just the gallery app
+python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **21**, across `core`,
+tests where they add lasting value (currently **28**, across `core`,
 `contact`, `reviews` and `gallery`), and a manual end-to-end pass in the
 browser for the full user journey and the look of each page.
 
@@ -639,8 +682,12 @@ browser for the full user journey and the look of each page.
   change-page and bulk deletes both remove the row **and** the file, and
   `prune_gallery_media` deletes only files with no database row. (These
   tests use `InMemoryStorage` so nothing is written to Cloudinary.)
-- `core/tests.py` checks an unknown URL renders the custom `404.html`;
-  `contact/tests.py` checks the contact page renders.
+- `core/tests.py` checks an unknown URL renders the custom `404.html`.
+- The **`contact` app has a test suite** (`contact/tests.py`): the page
+  renders with the map container, the `SiteContact` singleton always loads
+  one row, a valid enquiry is saved *and* emailed (with `reply-to` set),
+  the honeypot blocks spam, required fields are enforced, and a missing
+  recipient still saves the enquiry.
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -655,6 +702,10 @@ Done end-to-end for every feature so far, most recently:
   the home strip; edit an own review and confirm it drops back to pending;
   delete as the author, and delete someone else's as an admin; confirm a
   non-owner sees no edit/delete controls.
+- Contact: submit the enquiry form and confirm the thank-you message, the
+  enquiry in the admin, and (with a recipient set) the email; check the
+  Leaflet coverage map draws the radius circle; confirm the page still
+  renders cleanly with no `SiteContact` details filled in.
 - Accounts: registration, login by username *and* by email, logout,
   password-reset including real SMTP delivery, email verification, and the
   profile / avatar-upload flow.
@@ -704,9 +755,14 @@ configuration, and the page/CSS/JS structure. To rebrand:
 - **Content** — home/gallery/bookings templates.
 - **Palette** — the CSS custom properties in `core/static/core/css/base.css`
   and the per-page stylesheets.
-- **Imagery** — the home hero image (`core/templates/core/home.html`) and
-  the default review photo (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`).
-  Gallery photos and their categories are all admin data — no code changes.
+- **Imagery** — the home hero image (`core/templates/core/home.html`), the
+  default review photo (`DEFAULT_REVIEW_IMAGE` in `reviews/models.py`) and
+  the default contact photo (`DEFAULT_CONTACT_PHOTO` in
+  `contact/models.py`). Gallery photos and their categories, and all the
+  Contact us details, are admin data — no code changes.
+- **Contact / coverage** — the map centre in `contact/static/contact/js/
+  contact.js` (Chelmsford town centre); everything else (radius, area list,
+  phone, email) is edited in the admin.
 - **Gallery breakpoints** — the `column-count` media queries in
   `gallery/static/gallery/css/gallery.css` if a firm wants a different
   column progression.
@@ -733,8 +789,11 @@ shared code.
       the lightbox, "load more" if the library gets large
 - [x] Custom 404 page
 - [ ] Custom 403 / 500 pages (reuse `error.css`)
+- [x] Contact us page — admin-managed details, Leaflet coverage map,
+      enquiry form (saved + emailed, honeypot spam guard)
+- [ ] Contact follow-ups: real photo, rate-limit the form, auto-reply to
+      the sender
 - [ ] Bookings: real enquiry form, availability, confirmation emails
-- [ ] Contact page: enquiry form + business details (page scaffolded)
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a
