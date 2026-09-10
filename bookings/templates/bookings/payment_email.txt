@@ -1,0 +1,18 @@
+{{ cp.payer_name|default:job.user.get_username }} has paid £{{ cp.amount|floatformat:2 }} by card.
+
+JOB:         {{ job.reference }} - {{ job.title }}
+FOR:         {{ cp.get_purpose_display }}
+PAID SO FAR: £{{ job.total_paid|floatformat:2 }}
+OUTSTANDING: {% if job.balance_due is not None %}£{{ job.balance_due|floatformat:2 }}{% else %}(no agreed price yet){% endif %}
+{% if cp.purpose == "booking_fee" %}
+The booking fee is in - this job is now BOOKED and shows in the customer's portal.
+Next: start work on the agreed date, then Mark complete at the end.
+{% elif job.balance_due is not None and job.balance_due <= 0 %}
+That clears the balance - nothing more outstanding on this job.
+{% else %}
+There's still £{{ job.balance_due|floatformat:2 }} to come on this job.
+{% endif %}
+{{ invoice.get_kind_display }} {{ invoice.number }} was created automatically and
+is in the customer's portal. You don't need to record anything.
+
+{{ url }}

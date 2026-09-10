@@ -478,6 +478,7 @@ class Invoice(models.Model):
 
     class Kind(models.TextChoices):
         DEPOSIT = "deposit", "Booking fee receipt"
+        RECEIPT = "receipt", "Payment receipt"
         FINAL = "final", "Final invoice"
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="invoices")
@@ -586,3 +587,116 @@ class InvoiceLineItem(models.Model):
         invoice = self.invoice
         super().delete(*args, **kwargs)
         invoice.sync_total_from_line_items()
+
+
+class CardPayment(models.Model):
+    """One online card payment attempt, tracked through its Stripe lifecycle.
+
+    Created when the customer starts a checkout; `mark_succeeded()` (called by
+    the Stripe webhook and/or the return page) writes the money into the
+    `Payment` ledger, which in turn moves the job on.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class Purpose(models.TextChoices):
+        BOOKING_FEE = "booking_fee", "Booking fee"
+        BALANCE = "balance", "Balance in full"
+        PART = "part", "Part payment"
+
+    _LEDGER_KIND = {
+        Purpose.BOOKING_FEE: "booking_fee",
+        Purpose.BALANCE: "balance",
+        Purpose.PART: "part",
+    }
+
+    slug = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    job = models.ForeignKey(
+        Job, on_delete=models.CASCADE, related_name="card_payments"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="card_payments",
+    )
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    amount = models.DecimalField(max_digits=9, decimal_places=2)
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.PENDING
+    )
+
+    stripe_payment_intent = models.CharField(max_length=64, blank=True, db_index=True)
+    client_secret = models.CharField(max_length=255, blank=True)
+
+    payer_name = models.CharField(max_length=160, blank=True)
+    payer_email = models.EmailField(blank=True)
+    billing_address = models.CharField(max_length=400, blank=True)
+
+    authorised_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.CharField(max_length=300, blank=True)
+
+    payment = models.OneToOneField(
+        Payment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="card_payment",
+    )
+    invoice = models.OneToOneField(
+        "Invoice", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="source_card_payment",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"£{self.amount} {self.get_purpose_display()} - {self.job.reference}"
+
+    @property
+    def amount_pence(self):
+        return int((self.amount * 100).quantize(Decimal("1")))
+
+    @property
+    def ledger_kind(self):
+        return self._LEDGER_KIND[self.purpose]
+
+    @property
+    def is_settled(self):
+        return self.status == self.Status.SUCCEEDED
+
+    def mark_succeeded(self):
+        """Idempotently record the money and move the job on. Safe to call
+        from both the webhook and the checkout return page, more than once."""
+        if self.status == self.Status.SUCCEEDED and self.payment_id:
+            return
+
+        payment = Payment.objects.filter(
+            job=self.job, reference=self.stripe_payment_intent
+        ).first()
+        if payment is None:
+            payment = Payment.objects.create(
+                job=self.job,
+                amount=self.amount,
+                kind=self.ledger_kind,
+                method=Payment.Method.CARD,
+                reference=self.stripe_payment_intent,
+                note="Paid online by card",
+            )  # Payment.save() runs Job.recompute_after_payment()
+
+        self.status = self.Status.SUCCEEDED
+        self.paid_at = self.paid_at or timezone.now()
+        self.payment = payment
+        self.error_message = ""
+        self.save(update_fields=["status", "paid_at", "payment",
+                                 "error_message", "updated_at"])
+
+    def mark_failed(self, message=""):
+        if self.status == self.Status.SUCCEEDED:
+            return
+        self.status = self.Status.FAILED
+        self.error_message = (message or "")[:300]
+        self.save(update_fields=["status", "error_message", "updated_at"])

@@ -45,8 +45,11 @@ A multi-page Django site with:
   event lands on the fitter's Google Calendar with reminders), and a
   **customer project portal** ("Your projects" — a signed-in customer books
   a job, Joseph confirms the price and start date, and from then on the
-  portal shows job status, work photos, the agreed price, payments recorded
-  against it and the outstanding balance, plus downloadable PDF invoices).
+  portal shows job status, work photos, the agreed price, payments and the
+  outstanding balance, downloadable itemised PDF invoices, and **card
+  payments** — the customer pays the booking fee and the balance (in full or
+  in part-payments) on our own branded page, powered by Stripe Elements so
+  card data never touches this server).
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -78,6 +81,7 @@ credentials live in the repository.
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
 | Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
 | PDF | `reportlab` — generates the customer portal's downloadable invoices (logo, itemised line-item table, payment ledger) |
+| Payments | Stripe (`stripe` SDK + Stripe.js Elements) for portal card payments — optional, off until the Stripe keys are set; card data goes browser→Stripe, never through Django |
 
 Dependencies are pinned in `requirements.txt`.
 
@@ -235,9 +239,37 @@ Dependencies are pinned in `requirements.txt`.
   a link on the customer projects page.
 - **The booking fee is 20% of the agreed price** (`Job.BOOKING_FEE_PERCENT`,
   a computed property — no stored field to drift), a non-refundable deposit
-  that secures the slot and comes off the final balance. Online card payment
-  is **not built yet** (Stripe is the next stage); until then Joseph records
-  the fee (and later payments) by hand from the manage panel.
+  that secures the slot and comes off the final balance.
+- **Card payments (Stripe).** When Stripe keys are configured, the
+  *Awaiting booking fee* screen shows the customer a **"Pay £X booking fee
+  now"** button, and a live job with a balance shows **"Make a payment"** →
+  a screen to pay the **full balance or a part-amount** (any amount up to
+  the balance — they can come back and pay more whenever). Both lead to
+  **our own branded checkout page** (`/bookings/pay/<uuid>/`): our layout,
+  the customer's name / email / job address / a "I authorise this payment"
+  checkbox, and **Stripe Elements** for the billing address and card
+  fields. Card details go straight from the browser to Stripe — this server
+  only ever handles the PaymentIntent id and status (PCI SAQ A). A
+  `CardPayment` row tracks each attempt.
+- **On a successful card payment, everything happens automatically**
+  (`_finalise_card_payment`, idempotent, run by the Stripe **webhook** with
+  the return page as a backup — whichever gets there first):
+  1. a `Payment` ledger row (`method = card`) — shows in the portal for both
+     the customer and Joseph, and recalculates the outstanding balance;
+  2. the job moves on — a **paid booking fee auto-advances** *Awaiting
+     booking fee → Booked*, no click needed;
+  3. an **invoice is raised** — a *Booking fee receipt* for a deposit, a
+     *Payment receipt* (kind `receipt`) for a part-payment that leaves a
+     balance, a *Final invoice* once the balance is clear — each with the
+     itemised lines + full payment ledger, in the customer's portal;
+  4. **Joseph gets an email** — who paid what, paid-so-far, outstanding, and
+     the invoice number.
+  So Joseph never records card payments or issues those invoices by hand;
+  his only touchpoints stay *Accept & confirm booking* and *Mark complete*.
+  Stripe also emails the customer its own receipt (`receipt_email`).
+- Staff still record **cash / bank transfers** by hand from the manage
+  panel; card payments are the customer's own (staff get a 404 on the pay
+  routes). With **no Stripe keys** set, the buttons simply don't appear.
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
   or a **final invoice**, issued from the manage panel or an admin action.
   The letterhead carries the **company logo** (fetched once from Cloudinary,
@@ -249,7 +281,10 @@ Dependencies are pinned in `requirements.txt`.
   line with date and method, then the balance. The line items, the payment
   ledger and the totals are **frozen at issue** (`payments_snapshot` +
   `agreed_total` + `total_paid` on the `Invoice`) so a file downloaded today
-  says the same thing next year.
+  says the same thing next year. Invoices come in three kinds — *Booking fee
+  receipt*, *Payment receipt* (a mid-job statement with a balance still
+  showing), *Final invoice* — issued by hand from the manage panel **or
+  automatically after a card payment** (see below).
 - **Models** — `Job` (slug, auto reference `JN####`, optional `QuoteRequest`
   link, customer name / phone, address of works, agreed price, start date,
   status, notes; `booking_fee` is a computed 20% of the agreed price),
@@ -259,10 +294,12 @@ Dependencies are pinned in `requirements.txt`.
   `InvoiceLineItem` children (description, amount — their sum keeps the
   invoice's `agreed_total` in step). `QuoteRequest` gained a `reference`
   (`JQ####`, assigned on save; a data migration backfilled existing rows).
-  All managed from the `Job` admin page with inlines; `Job` and `Invoice`
-  can't be hand-added (jobs start as a customer request; invoices are
-  created by the issue actions), but line items are editable on the
-  `Invoice` page.
+  `CardPayment` tracks one Stripe PaymentIntent (pending → succeeded /
+  failed) and its `mark_succeeded()` writes the `Payment` ledger row
+  idempotently. All managed from the `Job` admin page with inlines; `Job`,
+  `Invoice` and `CardPayment` can't be hand-added (jobs start as a customer
+  request; invoices come from the issue actions; card payments come from
+  Stripe), but invoice line items are editable on the `Invoice` page.
 
 ### Contact us (`contact`)
 
@@ -658,17 +695,18 @@ J-Flooring-Specialist/
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
 ├── bookings/               # bookings landing + AI quote + call-back + portal
-│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, Payment, Invoice
+│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, Payment, Invoice, InvoiceLineItem, CardPayment
 │   ├── quoting.py          # rate card -> Claude -> parsed/validated estimate
 │   ├── calendar_sync.py    # CallRequest -> Google Calendar event (service account)
 │   ├── invoices.py         # Invoice -> PDF (reportlab)
+│   ├── payments.py         # Stripe: PaymentIntent create / retrieve / webhook verify
 │   ├── forms.py            # QuoteStartForm, CallRequestForm, BookJobForm, ConfirmBookingForm, RecordPaymentForm, FollowUpForm
-│   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice
-│   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage/actions, invoice PDF
-│   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits, portal access, money, invoices, staff manage
-│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields, 0006 drop stored booking_fee (now 20% computed), 0007 rate-card £50 lift charge, 0008 invoice line items + payment snapshot
-│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable, _loading_overlay), call, book, projects (+ detail, _staff_panel), manage, emails
-│   └── static/bookings/    # bookings.css, quote-loading.js ("please wait" overlay)
+│   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice/CardPayment
+│   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage, invoice PDF, Stripe checkout + webhook
+│   ├── tests.py            # gates, flows (mocked AI / calendar / Stripe), sanity check, limits, portal access, money, invoices, staff manage, card payments
+│   ├── migrations/         # 0001..0006 (quote/call/job/invoice/fee), 0007 rate-card £50 lift charge, 0008 invoice line items + payment snapshot, 0009 CardPayment, 0010 auto-invoice link + receipt kind
+│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable, _loading_overlay), call, book, projects (+ detail, _staff_panel), manage, checkout (+ pay_choose, checkout_return), emails (quote / call / job / payment)
+│   └── static/bookings/    # bookings.css, quote-loading.js, checkout.js (Stripe Elements)
 ├── contact/                # Contact us page - details, coverage map, enquiry form
 │   ├── models.py           # SiteContact (singleton), ContactEnquiry
 │   ├── forms.py            # EnquiryForm (+ honeypot)
@@ -768,6 +806,9 @@ development. See `.env.example` for the template.
 | `BOOKINGS_TIMEZONE` | No | Timezone for calendar events. Default `Europe/London`. |
 | `CALL_DAILY_LIMIT` | No | Call-back requests one signed-in user may send per day. Default `3`. |
 | `JOB_REQUEST_DAILY_LIMIT` | No | "Book a job" requests one signed-in customer may send per day. Default `3`. |
+| `STRIPE_PUBLISHABLE_KEY` | No | `pk_test_…` / `pk_live_…` from <https://dashboard.stripe.com/apikeys>. Safe for the browser. |
+| `STRIPE_SECRET_KEY` | No | `sk_test_…` / `sk_live_…`. Server only. With this + the publishable key, the portal's "Pay now" buttons appear. |
+| `STRIPE_WEBHOOK_SECRET` | No | `whsec_…` from the webhook endpoint (dashboard, or `stripe listen`). Needed for reliable payment confirmation. |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
 via SMTP; otherwise it is printed to the `runserver` console.
@@ -913,22 +954,59 @@ from **`/bookings/manage/`** and the customer's own project pages — no
    and **start date** and hit **Accept & confirm booking** → the customer
    sees the terms and that the **booking fee (20% of the agreed price)** is
    due.
-3. When the fee arrives (bank transfer / cash for now — online card is the
-   next stage), hit **Confirm £N received** → the job moves to *Booked – not
-   started*.
+3. When the fee arrives, hit **Confirm £N received** → the job moves to
+   *Booked – not started*. (With Stripe on, the customer can also pay it by
+   card themselves — see below.)
 4. **Start work** on the day, **Mark complete** when done. Upload work
    **photos** from the "Open in admin" link (file upload lives there).
-5. Record further **payments** with the panel's payment form, and **issue a
-   booking-fee receipt / final invoice** with its buttons — the customer
-   downloads them as PDFs from their portal. Each invoice starts with one
-   line item ("<job title> — flooring work as agreed"); open the invoice in
-   the admin to **split it into itemised lines** (e.g. supply & fit, lifting
-   the old floor, prep) — the subtotal follows their sum.
+5. Record further **payments** with the panel's payment form (for cash /
+   bank transfers — card payments record themselves, see below), and
+   **issue a booking-fee receipt / final invoice** with its buttons if you
+   need one manually. Each invoice starts with one line item ("<job title>
+   — flooring work as agreed"); open the invoice in the admin to **split it
+   into itemised lines** (e.g. supply & fit, lifting the old floor, prep) —
+   the subtotal follows their sum.
+
+With **Stripe on** (below), most of steps 2–5 look after themselves: the
+customer pays the booking fee and the balance by card, and each payment
+auto-records, auto-advances the job where relevant, auto-raises the right
+invoice, and emails you. You're left with *Accept & confirm booking* at the
+start and *Mark complete* at the end.
 
 The **Manage bookings** dashboard lists every job with status filters; you
 can also open any customer's page directly (a banner reminds you you're
 viewing as staff). All of this is limited to **Site Administrators** — a
 normal customer who tries to POST a staff action gets a 404.
+
+### Stripe card payments
+
+Optional. With no keys set, everything above still works and the customer
+just pays by bank transfer / cash. To turn card payments on:
+
+1. **Get your keys.** In the [Stripe dashboard](https://dashboard.stripe.com/apikeys)
+   — start in **test mode** (toggle top-right) — copy the **Publishable key**
+   (`pk_test_…`) and **Secret key** (`sk_test_…`) into `.env` as
+   `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY`.
+2. **Add a webhook.** Dashboard → **Developers → Webhooks → Add endpoint**,
+   URL `https://<your-site>/bookings/stripe/webhook/`, events
+   `payment_intent.succeeded` and `payment_intent.payment_failed`. Copy its
+   **Signing secret** (`whsec_…`) into `STRIPE_WEBHOOK_SECRET`.
+   *Locally*, instead run `stripe listen --forward-to
+   localhost:8000/bookings/stripe/webhook/` — it prints a `whsec_…` to use.
+3. **Restart the server.** The **"Pay … now"** and **"Make a payment"**
+   buttons now appear in the portal.
+4. **Test with Stripe's test cards** — e.g. `4242 4242 4242 4242`, any
+   future expiry, any CVC. Card `4000 0025 0000 3155` triggers the 3-D
+   Secure step; `4000 0000 0000 9995` is declined. No real money moves.
+5. **Go live later:** swap the four values for your live-mode keys and a
+   live webhook secret. No code change — just rotate the env vars and
+   restart.
+
+Every attempt is a `CardPayment` row (**Bookings → Card payments**,
+read-only); a successful one shows in the job's **Payments** table, raises
+an invoice in the customer's portal, and emails you — all automatically, so
+you don't touch the manage panel for card payments. Refunds are done from
+the Stripe dashboard.
 
 ---
 
@@ -943,7 +1021,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **111**, across `core`,
+tests where they add lasting value (currently **131**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -1006,8 +1084,20 @@ hit from the test suite.
   Site Administrator can confirm a booking (price + date required), record
   the 20% fee (which
   books the job in), start and complete it, record a payment and issue an
-  invoice; a customer POSTing any of those gets a 404. (Portal photo tests
-  use `InMemoryStorage`.)
+  invoice; a customer POSTing any of those gets a 404. For **Stripe card
+  payments** (SDK fully mocked — no real Stripe call from the suite): the
+  "Pay now" buttons appear only with keys configured; starting a deposit
+  payment creates a `CardPayment` + PaymentIntent and redirects to our
+  checkout; the checkout page carries the publishable key + client secret;
+  the POST records the authorisation; a succeeded PaymentIntent (via the
+  return page **or** the webhook) writes one card `Payment`, moves the job
+  on, **auto-raises an invoice** (`deposit` / `receipt` / `final` by
+  purpose and remaining balance) and **emails Joseph** — all idempotently
+  (webhook fired twice → one invoice, one email); a bad webhook signature is
+  a 400; full-balance and part-payment amounts are validated (over-balance
+  rejected); staff and other users get a 404 on the pay routes. (Portal
+  photo tests use `InMemoryStorage`; Stripe email tests use the locmem
+  mailer.)
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -1042,7 +1132,12 @@ Done end-to-end for every feature so far, most recently:
   as its own line, balance; uploaded work photos in the
   admin and confirmed they show in the portal; confirmed another account
   gets a 404 on the job and its invoice, and that a superuser sees the
-  "viewing as staff" banner.
+  "viewing as staff" banner. Card payments: checked the branded checkout
+  page renders (summary, our name/email/job-address fields, "authorise"
+  checkbox, Stripe Elements mount points), the "Pay now" / "Make a payment"
+  buttons appear only with keys set, and the pay-choice screen's
+  full-vs-part maths. End-to-end card runs against Stripe **test mode** are
+  the remaining live check — see "Stripe card payments" above.
 - Reviews: post a review, see the "awaiting approval" message, confirm it is
   not visible, approve it in the admin, confirm it appears on `/reviews/` and
   the home strip; edit an own review and confirm it drops back to pending;
@@ -1151,9 +1246,14 @@ shared code.
       staff confirms price + start date, job status / work photos / agreed
       price / payments / outstanding balance, downloadable PDF invoices,
       staff access to any customer's portal
-- [ ] Bookings next: Stripe — take the booking fee (20% of the price) and balance
-      payments online through the portal (records already model card / cash
-      / bank; only the online card step is left to wire up)
+- [x] Bookings — Stripe card payments: branded checkout (Stripe Elements),
+      pay the booking fee and the balance (full or part-payments), webhook +
+      return-page confirmation, `CardPayment` tracking. On success: ledger
+      row + job advance + auto-invoice + owner email, all idempotent. Test
+      mode wired up; swap to live keys when ready.
+- [ ] Payments follow-ups: a reconcile command for anything paid while a
+      webhook was down; an in-portal refund view; attach the invoice PDF to
+      the owner's payment email
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a

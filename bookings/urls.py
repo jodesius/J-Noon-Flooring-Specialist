@@ -18,4 +18,9 @@ urlpatterns = [
         views.invoice_pdf,
         name="invoice_pdf",
     ),
+    path("projects/<uuid:slug>/pay/deposit/", views.pay_deposit, name="pay_deposit"),
+    path("projects/<uuid:slug>/pay/balance/", views.pay_balance, name="pay_balance"),
+    path("pay/<uuid:slug>/", views.checkout, name="checkout"),
+    path("pay/<uuid:slug>/done/", views.checkout_return, name="checkout_return"),
+    path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),
 ]

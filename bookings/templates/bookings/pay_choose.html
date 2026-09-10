@@ -1,0 +1,67 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Make a payment{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Make a payment</h1>
+        <p>{{ job.title }} &middot; {{ job.reference }}</p>
+    </header>
+
+    <div class="bookings-card">
+        <table class="quote-result__breakdown job-money">
+            <tbody>
+                <tr><th>Agreed price</th><td>&pound;{{ job.agreed_price|floatformat:2 }}</td></tr>
+                <tr><th>Paid so far</th><td>&pound;{{ job.total_paid|floatformat:2 }}</td></tr>
+                <tr class="job-money__due">
+                    <th>Outstanding</th><td>&pound;{{ balance|floatformat:2 }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <form method="post" class="bk-form pay-choose">
+            {% csrf_token %}
+            <fieldset class="bk-form__group">
+                <legend>How much would you like to pay?</legend>
+                <div class="bk-field pay-choose__opt">
+                    <label>
+                        <input type="radio" name="choice" value="full" checked>
+                        Pay the full outstanding balance &mdash;
+                        <strong>&pound;{{ balance|floatformat:2 }}</strong>
+                    </label>
+                </div>
+                <div class="bk-field pay-choose__opt">
+                    <label>
+                        <input type="radio" name="choice" value="part">
+                        Pay part of it
+                    </label>
+                    <div class="pay-choose__amount">
+                        &pound;
+                        <input type="number" name="amount" step="0.01" min="1"
+                               max="{{ balance|floatformat:2 }}"
+                               placeholder="0.00" inputmode="decimal">
+                    </div>
+                    <span class="bk-field__help">
+                        Any amount up to &pound;{{ balance|floatformat:2 }}. You can come
+                        back and pay more whenever you like.
+                    </span>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="bk-btn bk-btn--primary">Continue to payment</button>
+        </form>
+    </div>
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:project_detail' slug=job.slug %}">&larr; Back to the job</a>
+    </p>
+</section>
+{% endblock %}

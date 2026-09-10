@@ -1,0 +1,99 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Pay &pound;{{ cp.amount|floatformat:2 }}{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Make a payment</h1>
+        <p>Secure card payment, handled by Stripe.</p>
+    </header>
+
+    <div class="bookings-card checkout">
+        <div class="checkout__summary">
+            <p class="checkout__for">
+                {% if cp.purpose == "booking_fee" %}Booking fee for
+                {% elif cp.purpose == "balance" %}Balance for
+                {% else %}Part payment towards{% endif %}
+                <strong>{{ job.title }}</strong> &middot; {{ job.reference }}
+            </p>
+            <p class="checkout__amount">&pound;{{ cp.amount|floatformat:2 }}</p>
+        </div>
+
+        <form id="checkout-form" class="bk-form checkout__form" novalidate>
+            {% csrf_token %}
+
+            <div class="checkout__row">
+                <div class="bk-field">
+                    <label for="first-name">First name</label>
+                    <input type="text" id="first-name" autocomplete="given-name"
+                           value="{{ defaults.first_name }}" required>
+                </div>
+                <div class="bk-field">
+                    <label for="last-name">Surname</label>
+                    <input type="text" id="last-name" autocomplete="family-name"
+                           value="{{ defaults.last_name }}" required>
+                </div>
+            </div>
+
+            <div class="bk-field">
+                <label for="email">Email address</label>
+                <input type="email" id="email" autocomplete="email"
+                       value="{{ defaults.email }}" required>
+                <span class="bk-field__help">Your receipt goes here.</span>
+            </div>
+
+            <div class="bk-field">
+                <label>Address of the job</label>
+                <p class="checkout__jobaddr">{{ job.site_address|default:"(not recorded)" }}</p>
+            </div>
+
+            <div class="bk-field">
+                <label>Billing address</label>
+                <div id="address-element"></div>
+            </div>
+
+            <div class="bk-field">
+                <label>Card details</label>
+                <div id="payment-element"></div>
+                <span class="bk-field__help">
+                    We never see or store your card number &mdash; it goes straight to Stripe.
+                </span>
+            </div>
+
+            <div class="bk-field bk-field--check checkout__authorise">
+                <input type="checkbox" id="authorise" required>
+                <label for="authorise">
+                    I authorise J-Noon Flooring Specialist to charge
+                    <strong>&pound;{{ cp.amount|floatformat:2 }}</strong> to my card.
+                </label>
+            </div>
+
+            <div id="pay-errors" class="bk-form__errors" hidden></div>
+
+            <button type="submit" id="pay-button" class="bk-btn bk-btn--primary">
+                <span id="pay-button-text">Pay &pound;{{ cp.amount|floatformat:2 }}</span>
+                <span id="pay-button-spinner" class="checkout__spinner" hidden></span>
+            </button>
+        </form>
+    </div>
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:project_detail' slug=job.slug %}">&larr; Back to the job (cancel)</a>
+    </p>
+</section>
+
+{{ checkout_data|json_script:"checkout-data" }}
+{% endblock %}
+
+{% block extra_js %}
+    <script src="https://js.stripe.com/v3/"></script>
+    <script src="{% static 'bookings/js/checkout.js' %}" defer></script>
+{% endblock %}

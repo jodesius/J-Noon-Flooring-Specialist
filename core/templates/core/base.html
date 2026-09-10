@@ -68,10 +68,11 @@
                     <span class="user-badge__name">{{ user.get_username }}</span>
                 </a>
             {% else %}
-                <div class="user-badge">
+                <a class="user-badge user-badge--link" href="{% url 'accounts:login' %}"
+                   title="Log in" aria-label="Log in">
                     {% include "core/_avatar.html" %}
                     <span class="user-badge__name">Not logged in</span>
-                </div>
+                </a>
             {% endif %}
         </div>
     </header>

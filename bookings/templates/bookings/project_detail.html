@@ -45,11 +45,23 @@
                <strong>&pound;{{ job.booking_fee|floatformat:2 }} booking fee</strong>
                (20% of the &pound;{{ job.agreed_price|floatformat:2 }} agreed price) is
                now due. It's non-refundable and comes straight off your final invoice.</p>
-            <p class="bk-form__disclaimer">
-                Card payments through the portal are coming soon. For now I'll take the
-                booking fee by bank transfer or cash and mark it here as soon as it
-                lands &mdash; then this job moves to <em>Booked</em>.
-            </p>
+            {% if stripe_ready and not can_manage %}
+                <form method="post" action="{% url 'bookings:pay_deposit' slug=job.slug %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bk-btn bk-btn--primary">
+                        Pay &pound;{{ job.booking_fee|floatformat:2 }} booking fee now
+                    </button>
+                </form>
+                <p class="bk-form__disclaimer">
+                    Card payment is handled securely by Stripe. Prefer bank transfer or
+                    cash? Just let me know and I'll mark it here.
+                </p>
+            {% else %}
+                <p class="bk-form__disclaimer">
+                    Pay the booking fee by bank transfer or cash and I'll mark it here as
+                    soon as it lands &mdash; then this job moves to <em>Booked</em>.
+                </p>
+            {% endif %}
 
         {% elif job.status == "cancelled" %}
             <p><span class="job-status job-status--cancelled">Cancelled</span></p>
@@ -94,10 +106,20 @@
                 </tbody>
             </table>
             {% if job.balance_due > 0 and job.is_live %}
-                <p class="bk-form__disclaimer">
-                    Pay the balance when the work's done, or as we've agreed. Online card
-                    payment is coming soon; until then it's bank transfer or cash.
-                </p>
+                {% if stripe_ready and not can_manage %}
+                    <a class="bk-btn bk-btn--primary"
+                       href="{% url 'bookings:pay_balance' slug=job.slug %}">Make a payment</a>
+                    <p class="bk-form__disclaimer">
+                        Pay the full balance or part of it by card &mdash; you can come
+                        back and pay more whenever you like. Bank transfer or cash is
+                        fine too; just let me know.
+                    </p>
+                {% else %}
+                    <p class="bk-form__disclaimer">
+                        Pay the balance when the work's done, or as we've agreed &mdash;
+                        bank transfer or cash.
+                    </p>
+                {% endif %}
             {% endif %}
         </div>
     {% endif %}

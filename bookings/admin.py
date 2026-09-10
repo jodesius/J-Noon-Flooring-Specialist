@@ -6,8 +6,8 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import (
-    CallRequest, FlooringRate, Invoice, InvoiceLineItem, Job, JobPhoto,
-    Payment, QuoteRequest, QuoteSettings,
+    CallRequest, CardPayment, FlooringRate, Invoice, InvoiceLineItem, Job,
+    JobPhoto, Payment, QuoteRequest, QuoteSettings,
 )
 
 
@@ -311,3 +311,22 @@ class InvoiceAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(CardPayment)
+class CardPaymentAdmin(admin.ModelAdmin):
+    list_display = ("job", "purpose", "amount", "status", "payer_name",
+                    "paid_at", "created_at")
+    list_filter = ("status", "purpose", "created_at")
+    search_fields = ("job__reference", "job__title", "payer_name", "payer_email",
+                     "stripe_payment_intent")
+    ordering = ("-created_at",)
+    readonly_fields = tuple(
+        f.name for f in CardPayment._meta.fields
+    ) + ("payment",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False  # read-only record of what Stripe did

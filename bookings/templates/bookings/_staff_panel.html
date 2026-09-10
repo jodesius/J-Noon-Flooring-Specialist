@@ -74,8 +74,9 @@ Context: job, confirm_form, payment_form, admin_url.
            When it lands, record it here &mdash; that books the job in and the
            customer sees it move to <em>Booked</em>.</p>
         <p class="staff-panel__note">
-            Online card payment is coming with Stripe. For now take it by bank
-            transfer or cash and log it below.
+            {% if stripe_ready %}The customer can pay the fee by card from their
+            portal, or{% else %}Take it by bank transfer or cash and{% endif %}
+            log it here once it's in.
         </p>
         <form method="post" class="staff-form staff-form--inline">
             {% csrf_token %}
@@ -136,6 +137,12 @@ Context: job, confirm_form, payment_form, admin_url.
     {% if job.agreed_price and job.status != "requested" and job.status != "cancelled" %}
         <hr class="staff-panel__rule">
         <h3>Record a payment</h3>
+        {% if stripe_ready %}
+            <p class="staff-panel__note">
+                Card payments the customer makes record themselves, raise an invoice
+                and email you &mdash; only use this for cash / bank transfers.
+            </p>
+        {% endif %}
         <form method="post" class="bk-form staff-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="record_payment">

@@ -1,13 +1,20 @@
+import logging
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.mail import EmailMessage
-from django.http import Http404, HttpResponse
+from django.http import (
+    Http404, HttpResponse, HttpResponseBadRequest, JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 from .calendar_sync import CalendarUnavailable, create_call_event
 from .forms import (
@@ -15,8 +22,14 @@ from .forms import (
     QuoteStartForm, RecordPaymentForm,
 )
 from .invoices import render_invoice_pdf
-from .models import CallRequest, Invoice, Job, Payment, QuoteRequest
+from .models import CallRequest, CardPayment, Invoice, Job, Payment, QuoteRequest
+from .payments import (
+    PaymentsUnavailable, create_payment_intent, retrieve_intent,
+    stripe_enabled, verify_webhook,
+)
 from .quoting import QuotingUnavailable, generate_quote, quoting_available
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -380,6 +393,7 @@ def project_detail(request, slug):
             "confirm_form": ConfirmBookingForm(instance=job) if can_manage else None,
             "payment_form": RecordPaymentForm() if can_manage else None,
             "admin_url": f"/admin/bookings/job/{job.pk}/change/" if can_manage else None,
+            "stripe_ready": stripe_enabled(),
         },
     )
 
@@ -392,6 +406,258 @@ def invoice_pdf(request, slug, number):
     resp = HttpResponse(pdf, content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="{invoice.number}.pdf"'
     return resp
+
+
+# ==========================================================================
+# Card payments (Stripe)
+# ==========================================================================
+
+def _owner_job(request, slug):
+    """A job the signed-in customer owns - card payments are the customer's
+    own, so staff don't get in here (they record cash/bank by hand)."""
+    job = get_object_or_404(Job.objects.select_related("user"), slug=slug)
+    if job.user_id != request.user.id:
+        raise Http404
+    return job
+
+
+def _payer_defaults(user, job):
+    first = (user.first_name or "").strip()
+    last = (user.last_name or "").strip()
+    if not (first or last) and job.contact_name:
+        parts = job.contact_name.split()
+        first, last = parts[0], " ".join(parts[1:])
+    return {"first_name": first, "last_name": last, "email": user.email or ""}
+
+
+def _start_card_payment(request, job, purpose, amount):
+    """Re-use a fresh pending attempt if there is one, otherwise create a new
+    `CardPayment` and its Stripe PaymentIntent. Returns it, or None on error
+    (a message has been queued)."""
+    cp = job.card_payments.filter(
+        user=request.user, purpose=purpose, amount=amount,
+        status=CardPayment.Status.PENDING,
+        created_at__gte=timezone.now() - timedelta(hours=2),
+    ).first()
+    if cp is None:
+        cp = CardPayment.objects.create(
+            job=job, user=request.user, purpose=purpose, amount=amount,
+        )
+    if not cp.client_secret:
+        try:
+            intent = create_payment_intent(cp)
+        except PaymentsUnavailable as exc:
+            cp.mark_failed(str(exc))
+            messages.error(
+                request,
+                "Sorry - I couldn't start the card payment just now. Try again "
+                "shortly, or pay by bank transfer and let me know.",
+            )
+            return None
+        cp.stripe_payment_intent = intent["id"]
+        cp.client_secret = intent["client_secret"]
+        cp.save(update_fields=["stripe_payment_intent", "client_secret",
+                               "updated_at"])
+    return cp
+
+
+@login_required
+@require_POST
+def pay_deposit(request, slug):
+    job = _owner_job(request, slug)
+    if not stripe_enabled():
+        messages.error(request, "Card payments aren't set up yet.")
+        return redirect("bookings:project_detail", slug=job.slug)
+    if job.status != Job.Status.AWAITING_DEPOSIT or job.deposit_paid:
+        messages.info(request, "No booking fee is due on this job.")
+        return redirect("bookings:project_detail", slug=job.slug)
+    fee = job.booking_fee
+    if not fee or fee <= 0:
+        messages.error(request, "The booking fee isn't set yet - I'll be in touch.")
+        return redirect("bookings:project_detail", slug=job.slug)
+    cp = _start_card_payment(request, job, CardPayment.Purpose.BOOKING_FEE, fee)
+    if cp is None:
+        return redirect("bookings:project_detail", slug=job.slug)
+    return redirect("bookings:checkout", slug=cp.slug)
+
+
+@login_required
+def pay_balance(request, slug):
+    job = _owner_job(request, slug)
+    if not stripe_enabled():
+        messages.error(request, "Card payments aren't set up yet.")
+        return redirect("bookings:project_detail", slug=job.slug)
+    balance = job.balance_due
+    if not job.is_live or balance is None or balance <= 0:
+        messages.info(request, "There's nothing outstanding on this job.")
+        return redirect("bookings:project_detail", slug=job.slug)
+
+    if request.method == "POST":
+        choice = request.POST.get("choice", "full")
+        amount = balance
+        if choice == "part":
+            try:
+                amount = Decimal(
+                    request.POST.get("amount", "").strip()
+                ).quantize(Decimal("0.01"))
+            except (InvalidOperation, TypeError):
+                amount = None
+        if amount is None or amount <= 0 or amount > balance:
+            messages.error(
+                request, f"Enter an amount between £1 and £{balance:.2f}."
+            )
+            return redirect("bookings:pay_balance", slug=job.slug)
+        purpose = (
+            CardPayment.Purpose.BALANCE if amount == balance
+            else CardPayment.Purpose.PART
+        )
+        cp = _start_card_payment(request, job, purpose, amount)
+        if cp is None:
+            return redirect("bookings:project_detail", slug=job.slug)
+        return redirect("bookings:checkout", slug=cp.slug)
+
+    return render(request, "bookings/pay_choose.html",
+                  {"job": job, "balance": balance})
+
+
+@login_required
+def checkout(request, slug):
+    cp = get_object_or_404(
+        CardPayment.objects.select_related("job", "job__user"),
+        slug=slug, user=request.user,
+    )
+    if cp.is_settled:
+        return redirect("bookings:checkout_return", slug=cp.slug)
+
+    if request.method == "POST":
+        # The browser records the customer's authorisation + payer details
+        # here, then calls stripe.confirmPayment().
+        name = (request.POST.get("name") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        billing = (request.POST.get("billing") or "").strip()
+        if not name or not email:
+            return JsonResponse(
+                {"ok": False, "error": "Your name and email are needed."},
+                status=400,
+            )
+        cp.payer_name = name[:160]
+        cp.payer_email = email[:254]
+        cp.billing_address = billing[:400]
+        cp.authorised_at = timezone.now()
+        cp.save(update_fields=["payer_name", "payer_email", "billing_address",
+                               "authorised_at", "updated_at"])
+        return JsonResponse({"ok": True})
+
+    job = cp.job
+    checkout_data = {
+        "publishableKey": settings.STRIPE_PUBLISHABLE_KEY,
+        "clientSecret": cp.client_secret,
+        "returnUrl": request.build_absolute_uri(
+            reverse("bookings:checkout_return", args=[cp.slug])
+        ),
+        "authoriseUrl": reverse("bookings:checkout", args=[cp.slug]),
+    }
+    return render(request, "bookings/checkout.html", {
+        "cp": cp, "job": job,
+        "defaults": _payer_defaults(request.user, job),
+        "checkout_data": checkout_data,
+    })
+
+
+def _invoice_kind_for(cp):
+    if cp.purpose == CardPayment.Purpose.BOOKING_FEE:
+        return Invoice.Kind.DEPOSIT
+    balance = cp.job.balance_due
+    if balance is not None and balance <= 0:
+        return Invoice.Kind.FINAL
+    return Invoice.Kind.RECEIPT
+
+
+def _finalise_card_payment(request, cp):
+    """Idempotent post-success work: put the money in the ledger, raise a
+    receipt/invoice, and email Joseph. Called by the webhook AND the return
+    page - whichever gets there first does it, the other is a no-op."""
+    from django.db import transaction
+
+    with transaction.atomic():
+        cp = (
+            CardPayment.objects.select_for_update()
+            .select_related("job", "job__user")
+            .get(pk=cp.pk)
+        )
+        cp.mark_succeeded()  # ledger row + (for a deposit) job -> Booked
+        if cp.invoice_id:
+            return  # already finalised
+        invoice = Invoice(job=cp.job, kind=_invoice_kind_for(cp))
+        invoice.snapshot_from_job()
+        invoice.save()
+        invoice.ensure_default_line_item()
+        cp.invoice = invoice
+        cp.save(update_fields=["invoice", "updated_at"])
+
+    try:
+        _email_staff(
+            request,
+            "bookings/payment_email_subject.txt", "bookings/payment_email.txt",
+            {
+                "cp": cp, "job": cp.job, "invoice": invoice,
+                "url": request.build_absolute_uri(
+                    f"/admin/bookings/job/{cp.job.pk}/change/"
+                ),
+            },
+        )
+    except Exception:
+        logger.exception("Payment notification email failed (CardPayment %s)", cp.pk)
+
+
+@login_required
+def checkout_return(request, slug):
+    cp = get_object_or_404(CardPayment, slug=slug, user=request.user)
+    if not cp.is_settled and cp.stripe_payment_intent:
+        try:
+            intent = retrieve_intent(cp.stripe_payment_intent)
+        except PaymentsUnavailable:
+            intent = None
+        if intent is not None:
+            status = intent["status"]
+            if status == "succeeded":
+                _finalise_card_payment(request, cp)
+                cp.refresh_from_db()
+            elif status in ("requires_payment_method", "canceled"):
+                cp.mark_failed(f"Stripe reported: {status}")
+    return render(request, "bookings/checkout_return.html",
+                  {"cp": cp, "job": cp.job})
+
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    try:
+        event = verify_webhook(
+            request.body, request.META.get("HTTP_STRIPE_SIGNATURE", "")
+        )
+    except PaymentsUnavailable:
+        return HttpResponse(status=503)
+    except Exception:
+        return HttpResponseBadRequest("invalid signature")
+
+    kind = event["type"]
+    if kind in ("payment_intent.succeeded", "payment_intent.payment_failed"):
+        obj = event["data"]["object"]
+        slug = (obj.get("metadata") or {}).get("card_payment")
+        cp = (
+            CardPayment.objects.filter(slug=slug).first() if slug else None
+        ) or CardPayment.objects.filter(
+            stripe_payment_intent=obj.get("id", "")
+        ).first()
+        if cp is not None:
+            if kind == "payment_intent.succeeded":
+                _finalise_card_payment(request, cp)
+            else:
+                cp.mark_failed(
+                    (obj.get("last_payment_error") or {}).get("message", "")
+                )
+    return HttpResponse(status=200)
 
 
 @login_required

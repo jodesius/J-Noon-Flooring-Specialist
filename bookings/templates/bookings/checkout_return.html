@@ -1,0 +1,61 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Payment{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    {% if cp.status == "succeeded" %}
+        <header class="bookings-page__head">
+            <h1>Payment received &mdash; thank you</h1>
+        </header>
+        <div class="bookings-card">
+            <p>Your payment of <strong>&pound;{{ cp.amount|floatformat:2 }}</strong> for
+               {{ job.title }} ({{ job.reference }}) has gone through. A receipt is on
+               its way to your email.</p>
+            <p>Everything's updated on your project page.</p>
+            <a class="bk-btn bk-btn--primary"
+               href="{% url 'bookings:project_detail' slug=job.slug %}">Back to the job</a>
+        </div>
+
+    {% elif cp.status == "failed" %}
+        <header class="bookings-page__head">
+            <h1>That payment didn't go through</h1>
+        </header>
+        <div class="bookings-card">
+            <p>{% if cp.error_message %}{{ cp.error_message }}{% else %}
+               The payment was declined or cancelled.{% endif %}
+               Nothing has been charged.</p>
+            {% if cp.purpose == "booking_fee" %}
+                <form method="post" action="{% url 'bookings:pay_deposit' slug=job.slug %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bk-btn bk-btn--primary">Try again</button>
+                </form>
+            {% else %}
+                <a class="bk-btn bk-btn--primary"
+                   href="{% url 'bookings:pay_balance' slug=job.slug %}">Try again</a>
+            {% endif %}
+        </div>
+
+    {% else %}
+        <header class="bookings-page__head">
+            <h1>Payment processing</h1>
+        </header>
+        <div class="bookings-card" data-poll="1">
+            <p>Your payment is going through. This page will update in a moment &mdash;
+               you can also check your project page shortly.</p>
+            <a class="bk-btn bk-btn--ghost"
+               href="{% url 'bookings:project_detail' slug=job.slug %}">Go to the job</a>
+        </div>
+        <script>
+            setTimeout(function () { window.location.reload(); }, 4000);
+        </script>
+    {% endif %}
+</section>
+{% endblock %}

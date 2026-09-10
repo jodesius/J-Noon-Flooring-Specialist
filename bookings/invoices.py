@@ -125,6 +125,7 @@ def render_invoice_pdf(invoice):
 
     doc_title = {
         invoice.Kind.DEPOSIT: "Booking fee receipt",
+        invoice.Kind.RECEIPT: "Payment receipt",
         invoice.Kind.FINAL: "Invoice",
     }.get(invoice.kind, "Invoice")
 
@@ -203,7 +204,7 @@ def render_invoice_pdf(invoice):
         rows.append([Paragraph(desc, cell),
                      Paragraph("- " + _money(amount), cell_r)])
 
-    if invoice.kind == invoice.Kind.FINAL and balance > 0:
+    if invoice.kind in (invoice.Kind.FINAL, invoice.Kind.RECEIPT) and balance > 0:
         balance_label = "Balance due"
     else:
         balance_label = "Balance"
@@ -230,6 +231,10 @@ def render_invoice_pdf(invoice):
                        "secured. It's non-refundable and comes off your final invoice.")
     elif balance <= 0:
         totals_note = "Paid in full - thank you."
+    elif invoice.kind == invoice.Kind.RECEIPT:
+        totals_note = ("Thank you - this payment is recorded against your job. "
+                       f"{_money(balance)} still to pay, when the work's complete "
+                       "or as otherwise agreed.")
     else:
         totals_note = ("Please settle the balance once the work is complete, or as "
                        "otherwise agreed.")

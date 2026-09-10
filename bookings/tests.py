@@ -11,8 +11,8 @@ from django.utils import timezone
 
 from .calendar_sync import CalendarUnavailable
 from .models import (
-    CallRequest, FlooringRate, Invoice, InvoiceLineItem, Job, JobPhoto,
-    Payment, QuoteRequest, QuoteSettings,
+    CallRequest, CardPayment, FlooringRate, Invoice, InvoiceLineItem, Job,
+    JobPhoto, Payment, QuoteRequest, QuoteSettings,
 )
 from .quoting import (
     QuotingUnavailable, _preview_response, _sanitise, quoting_available,
@@ -748,6 +748,288 @@ class JobPhotoTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All done")
+
+
+STRIPE_ON = override_settings(
+    STRIPE_SECRET_KEY="sk_test_x",
+    STRIPE_PUBLISHABLE_KEY="pk_test_x",
+    STRIPE_WEBHOOK_SECRET="whsec_x",
+)
+
+FAKE_INTENT = {"id": "pi_test_1", "client_secret": "pi_test_1_secret_abc"}
+
+
+@LOCMEM
+@STRIPE_ON
+class StripePaymentTests(TestCase):
+    def setUp(self):
+        self.user = make_user("payer")
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(
+            user=self.user, title="Kitchen LVT", agreed_price=Decimal("1000.00"),
+            status=Job.Status.AWAITING_DEPOSIT, contact_name="Sam Payer",
+            site_address="1 Test Rd, Chelmsford",
+        )
+
+    def _detail_url(self):
+        return reverse("bookings:project_detail", kwargs={"slug": self.job.slug})
+
+    # -- buttons show only when Stripe is on --------------------------
+
+    @override_settings(STRIPE_SECRET_KEY="", STRIPE_PUBLISHABLE_KEY="")
+    def test_no_pay_button_when_stripe_off(self):
+        resp = self.client.get(self._detail_url())
+        self.assertNotContains(
+            resp, reverse("bookings:pay_deposit", kwargs={"slug": self.job.slug})
+        )
+
+    def test_pay_button_shows_when_stripe_on(self):
+        resp = self.client.get(self._detail_url())
+        self.assertContains(
+            resp, reverse("bookings:pay_deposit", kwargs={"slug": self.job.slug})
+        )
+
+    # -- starting a deposit payment ----------------------------------
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_pay_deposit_creates_cardpayment_and_redirects(self, mock_pi):
+        resp = self.client.post(
+            reverse("bookings:pay_deposit", kwargs={"slug": self.job.slug})
+        )
+        cp = CardPayment.objects.get()
+        self.assertEqual(cp.purpose, CardPayment.Purpose.BOOKING_FEE)
+        self.assertEqual(cp.amount, Decimal("200.00"))  # 20% of 1000
+        self.assertEqual(cp.stripe_payment_intent, "pi_test_1")
+        self.assertRedirects(
+            resp, reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+        mock_pi.assert_called_once()
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_pay_deposit_wrong_status_does_nothing(self, _mock):
+        self.job.status = Job.Status.UNDERWAY
+        self.job.save()
+        self.client.post(
+            reverse("bookings:pay_deposit", kwargs={"slug": self.job.slug})
+        )
+        self.assertEqual(CardPayment.objects.count(), 0)
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_staff_cannot_start_a_card_payment(self, _mock):
+        boss = User.objects.create_user(
+            username="boss2", email="boss2@example.com", password="pw1!pass",
+            is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(boss)
+        resp = self.client.post(
+            reverse("bookings:pay_deposit", kwargs={"slug": self.job.slug})
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(CardPayment.objects.count(), 0)
+
+    # -- the checkout page -----------------------------------------
+
+    def _card_payment(self, purpose=CardPayment.Purpose.BOOKING_FEE,
+                      amount=Decimal("200.00")):
+        return CardPayment.objects.create(
+            job=self.job, user=self.user, purpose=purpose, amount=amount,
+            stripe_payment_intent="pi_test_1",
+            client_secret="pi_test_1_secret_abc",
+        )
+
+    def test_checkout_page_renders_with_keys(self):
+        cp = self._card_payment()
+        resp = self.client.get(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "pk_test_x")
+        self.assertContains(resp, "pi_test_1_secret_abc")
+        self.assertContains(resp, "authorise")
+
+    def test_checkout_post_records_authorisation(self):
+        cp = self._card_payment()
+        resp = self.client.post(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug}),
+            {"name": "Sam Payer", "email": "sam@example.com", "billing": "{}"},
+        )
+        self.assertEqual(resp.json(), {"ok": True})
+        cp.refresh_from_db()
+        self.assertEqual(cp.payer_name, "Sam Payer")
+        self.assertIsNotNone(cp.authorised_at)
+
+    def test_checkout_belongs_to_another_user_is_404(self):
+        cp = self._card_payment()
+        self.client.force_login(make_user("intruder"))
+        resp = self.client.get(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    # -- money lands: return page + webhook ------------------------
+
+    @patch("bookings.views.retrieve_intent", return_value={"status": "succeeded"})
+    def test_return_page_records_payment_and_moves_job(self, _mock):
+        cp = self._card_payment()
+        self.client.get(
+            reverse("bookings:checkout_return", kwargs={"slug": cp.slug})
+        )
+        cp.refresh_from_db()
+        self.job.refresh_from_db()
+        self.assertEqual(cp.status, CardPayment.Status.SUCCEEDED)
+        self.assertEqual(self.job.status, Job.Status.NOT_STARTED)
+        p = Payment.objects.get()
+        self.assertEqual(p.method, Payment.Method.CARD)
+        self.assertEqual(p.amount, Decimal("200.00"))
+        self.assertEqual(p.reference, "pi_test_1")
+
+    def _webhook(self, event):
+        with patch("bookings.views.verify_webhook", return_value=event):
+            return self.client.post(
+                reverse("bookings:stripe_webhook"), data="{}",
+                content_type="application/json", HTTP_STRIPE_SIGNATURE="t=1,v1=x",
+            )
+
+    def test_webhook_success_records_payment(self):
+        cp = self._card_payment()
+        event = {"type": "payment_intent.succeeded",
+                 "data": {"object": {"id": "pi_test_1",
+                                     "metadata": {"card_payment": str(cp.slug)}}}}
+        resp = self._webhook(event)
+        self.assertEqual(resp.status_code, 200)
+        cp.refresh_from_db()
+        self.assertEqual(cp.status, CardPayment.Status.SUCCEEDED)
+        self.assertEqual(Payment.objects.filter(reference="pi_test_1").count(), 1)
+
+    def test_webhook_is_idempotent(self):
+        cp = self._card_payment()
+        event = {"type": "payment_intent.succeeded",
+                 "data": {"object": {"id": "pi_test_1",
+                                     "metadata": {"card_payment": str(cp.slug)}}}}
+        self._webhook(event)
+        self._webhook(event)
+        self.assertEqual(Payment.objects.filter(reference="pi_test_1").count(), 1)
+
+    def test_webhook_bad_signature_is_400(self):
+        with patch("bookings.views.verify_webhook", side_effect=ValueError("bad")):
+            resp = self.client.post(
+                reverse("bookings:stripe_webhook"), data="{}",
+                content_type="application/json", HTTP_STRIPE_SIGNATURE="x",
+            )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_webhook_failure_marks_failed(self):
+        cp = self._card_payment()
+        event = {"type": "payment_intent.payment_failed",
+                 "data": {"object": {"id": "pi_test_1",
+                                     "metadata": {"card_payment": str(cp.slug)},
+                                     "last_payment_error": {"message": "Card declined"}}}}
+        self._webhook(event)
+        cp.refresh_from_db()
+        self.assertEqual(cp.status, CardPayment.Status.FAILED)
+        self.assertEqual(cp.error_message, "Card declined")
+
+    # -- balance / part payments ----------------------------------
+
+    def _live_job(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("200.00"),
+            kind=Payment.Kind.BOOKING_FEE, method=Payment.Method.CARD,
+        )
+        self.job.refresh_from_db()  # now NOT_STARTED, balance 800
+        return self.job
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_pay_full_balance(self, _mock):
+        self._live_job()
+        resp = self.client.post(
+            reverse("bookings:pay_balance", kwargs={"slug": self.job.slug}),
+            {"choice": "full"},
+        )
+        cp = CardPayment.objects.filter(purpose=CardPayment.Purpose.BALANCE).get()
+        self.assertEqual(cp.amount, Decimal("800.00"))
+        self.assertRedirects(
+            resp, reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_pay_part_balance(self, _mock):
+        self._live_job()
+        self.client.post(
+            reverse("bookings:pay_balance", kwargs={"slug": self.job.slug}),
+            {"choice": "part", "amount": "300"},
+        )
+        cp = CardPayment.objects.filter(purpose=CardPayment.Purpose.PART).get()
+        self.assertEqual(cp.amount, Decimal("300.00"))
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_part_amount_over_balance_is_rejected(self, _mock):
+        self._live_job()
+        self.client.post(
+            reverse("bookings:pay_balance", kwargs={"slug": self.job.slug}),
+            {"choice": "part", "amount": "5000"},
+        )
+        self.assertEqual(CardPayment.objects.count(), 0)
+
+    # -- auto-invoice + owner notification on success --------------
+
+    def test_deposit_payment_auto_issues_receipt_and_emails_owner(self):
+        cp = self._card_payment()
+        event = {"type": "payment_intent.succeeded",
+                 "data": {"object": {"id": "pi_test_1",
+                                     "metadata": {"card_payment": str(cp.slug)}}}}
+        self._webhook(event)
+        cp.refresh_from_db()
+        self.assertIsNotNone(cp.invoice_id)
+        self.assertEqual(cp.invoice.kind, Invoice.Kind.DEPOSIT)
+        self.assertEqual(cp.invoice.line_items.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        self.assertIn("JN", body)
+        self.assertIn("BOOKED", body)
+
+    def test_finalise_is_idempotent_one_invoice_one_email(self):
+        cp = self._card_payment()
+        event = {"type": "payment_intent.succeeded",
+                 "data": {"object": {"id": "pi_test_1",
+                                     "metadata": {"card_payment": str(cp.slug)}}}}
+        self._webhook(event)     # e.g. Stripe retries the webhook
+        self._webhook(event)
+        self.assertEqual(Invoice.objects.filter(job=self.job).count(), 1)
+        self.assertEqual(Payment.objects.filter(reference="pi_test_1").count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_part_payment_issues_a_receipt_kind_invoice(self, _mock):
+        self._live_job()  # balance 800
+        cp = CardPayment.objects.create(
+            job=self.job, user=self.user, purpose=CardPayment.Purpose.PART,
+            amount=Decimal("300.00"), stripe_payment_intent="pi_part",
+        )
+        with patch("bookings.views.retrieve_intent", return_value={"status": "succeeded"}):
+            self.client.get(
+                reverse("bookings:checkout_return", kwargs={"slug": cp.slug})
+            )
+        cp.refresh_from_db()
+        self.assertEqual(cp.invoice.kind, Invoice.Kind.RECEIPT)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.balance_due, Decimal("500.00"))
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_balance_clearing_payment_issues_a_final_invoice(self, _mock):
+        self._live_job()  # balance 800
+        cp = CardPayment.objects.create(
+            job=self.job, user=self.user, purpose=CardPayment.Purpose.BALANCE,
+            amount=Decimal("800.00"), stripe_payment_intent="pi_bal",
+        )
+        with patch("bookings.views.retrieve_intent", return_value={"status": "succeeded"}):
+            self.client.get(
+                reverse("bookings:checkout_return", kwargs={"slug": cp.slug})
+            )
+        cp.refresh_from_db()
+        self.assertEqual(cp.invoice.kind, Invoice.Kind.FINAL)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.balance_due, Decimal("0.00"))
 
 
 @LOCMEM

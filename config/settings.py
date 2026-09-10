@@ -275,3 +275,17 @@ CALL_DAILY_LIMIT = int(os.environ.get("CALL_DAILY_LIMIT", "3"))
 # Customer portal ("Your projects")
 # How many booking requests one signed-in user may send per day.
 JOB_REQUEST_DAILY_LIMIT = int(os.environ.get("JOB_REQUEST_DAILY_LIMIT", "3"))
+
+
+# Stripe (customer portal card payments)
+# https://dashboard.stripe.com/apikeys  (use the TEST keys to start, then swap
+# to live keys later - the code is identical).
+#   STRIPE_PUBLISHABLE_KEY - pk_test_... / pk_live_...  (safe for the browser)
+#   STRIPE_SECRET_KEY      - sk_test_... / sk_live_...  (server only, secret)
+#   STRIPE_WEBHOOK_SECRET  - whsec_...  from the webhook endpoint you add in
+#                            the Stripe dashboard (or `stripe listen` locally)
+# With no keys set, the portal's "Pay now" buttons are hidden and Joseph
+# records payments by hand as before.
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")

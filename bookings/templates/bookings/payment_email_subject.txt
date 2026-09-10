@@ -1,0 +1,1 @@
+Payment received: £{{ cp.amount|floatformat:2 }} for {{ job.reference }} ({{ cp.get_purpose_display }})

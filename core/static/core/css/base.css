@@ -184,7 +184,7 @@ body {
     white-space: nowrap;
 }
 
-/* The badge is a link straight to the profile page. */
+/* The badge links to the profile page (signed in) or the login page (out). */
 .user-badge--link {
     text-decoration: none;
     color: inherit;
