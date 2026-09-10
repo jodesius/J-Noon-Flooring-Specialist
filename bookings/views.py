@@ -280,7 +280,7 @@ def _handle_job_action(request, job):
             messages.success(
                 request,
                 f"Booking accepted. {who} can now pay the "
-                f"£{job.booking_fee:.0f} booking fee.",
+                f"£{job.booking_fee:.2f} booking fee (20% of £{job.agreed_price:.2f}).",
             )
         else:
             messages.error(
@@ -295,7 +295,7 @@ def _handle_job_action(request, job):
             kind=Payment.Kind.BOOKING_FEE, method=method,
         )  # Payment.save() moves the job on to "Booked - not started"
         messages.success(
-            request, f"£{job.booking_fee:.0f} booking fee recorded - the job is booked in."
+            request, f"£{job.booking_fee:.2f} booking fee recorded - the job is booked in."
         )
         return
 

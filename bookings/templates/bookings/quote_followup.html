@@ -27,4 +27,10 @@
         </form>
     </div>
 </section>
+
+{% include "bookings/_loading_overlay.html" %}
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'bookings/js/quote-loading.js' %}" defer></script>
 {% endblock %}

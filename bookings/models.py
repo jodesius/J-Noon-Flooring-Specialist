@@ -259,9 +259,10 @@ class CallRequest(models.Model):
 #
 # A Job is one booked piece of work. The customer requests it (against a
 # quote they've had), Joseph sets the agreed price + start date and confirms
-# it, the customer secures it with a non-refundable £100 booking fee, and
-# from then on the portal is where progress, photos, payments and invoices
-# all live. Payments are recorded by hand for now; card payments come later.
+# it, the customer secures it with a non-refundable booking fee (20% of the
+# agreed price), and from then on the portal is where progress, photos,
+# payments and invoices all live. Payments are recorded by hand for now;
+# card payments come later.
 # ==========================================================================
 
 
@@ -296,7 +297,8 @@ class Job(models.Model):
         Status.NOT_STARTED, Status.UNDERWAY, Status.COMPLETE,
     }
 
-    DEFAULT_BOOKING_FEE = Decimal("100.00")
+    # The non-refundable booking fee is this percentage of the agreed price.
+    BOOKING_FEE_PERCENT = Decimal("20")
 
     slug = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     reference = models.CharField(max_length=12, unique=True, editable=False, blank=True)
@@ -325,11 +327,8 @@ class Job(models.Model):
 
     agreed_price = models.DecimalField(
         max_digits=9, decimal_places=2, null=True, blank=True,
-        help_text="The price you and the customer have agreed (inc. VAT if applicable).",
-    )
-    booking_fee = models.DecimalField(
-        max_digits=7, decimal_places=2, default=DEFAULT_BOOKING_FEE,
-        help_text="Non-refundable deposit that secures the booking. Comes off the balance.",
+        help_text="The price you and the customer have agreed (inc. VAT if applicable). "
+        "The booking fee is 20% of this.",
     )
     start_date = models.DateField(
         null=True, blank=True, help_text="Agreed start date."
@@ -364,6 +363,17 @@ class Job(models.Model):
             super().save(update_fields=["reference"])
 
     # -- money -----------------------------------------------------------
+
+    @property
+    def booking_fee(self):
+        """Non-refundable deposit that secures the booking - 20% of the
+        agreed price. Comes off the final balance. ``None`` until the price
+        is set."""
+        if self.agreed_price is None:
+            return None
+        return (self.agreed_price * self.BOOKING_FEE_PERCENT / 100).quantize(
+            Decimal("0.01")
+        )
 
     @property
     def total_paid(self):

@@ -1,0 +1,15 @@
+{% comment %}
+Full-screen "please wait" overlay, shown by quote-loading.js when the quote
+form is submitted (the AI call can take a while). Hidden until then.
+{% endcomment %}
+<div class="bk-loading" id="bk-loading" role="alertdialog" aria-modal="true"
+     aria-labelledby="bk-loading-title" aria-describedby="bk-loading-note">
+    <div class="bk-loading__box">
+        <div class="bk-loading__spinner" aria-hidden="true"></div>
+        <p class="bk-loading__title" id="bk-loading-title">Your quote is being calculated</p>
+        <p class="bk-loading__note" id="bk-loading-note">
+            This can take up to a minute while I work through the details.
+            <strong>Please don't close or refresh the page.</strong>
+        </p>
+    </div>
+</div>

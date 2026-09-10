@@ -42,7 +42,8 @@
         {% elif job.status == "awaiting_deposit" %}
             <p><span class="job-status job-status--awaiting_deposit">Awaiting booking fee</span></p>
             <p>We've agreed the details below. To lock in your slot, the
-               <strong>&pound;{{ job.booking_fee|floatformat:0 }} booking fee</strong> is
+               <strong>&pound;{{ job.booking_fee|floatformat:2 }} booking fee</strong>
+               (20% of the &pound;{{ job.agreed_price|floatformat:2 }} agreed price) is
                now due. It's non-refundable and comes straight off your final invoice.</p>
             <p class="bk-form__disclaimer">
                 Card payments through the portal are coming soon. For now I'll take the

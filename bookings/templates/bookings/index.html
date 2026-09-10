@@ -51,8 +51,8 @@
         <div class="bookings-card">
             <h2>Book a job</h2>
             <p>Happy with your quote? Ask to book it in. I'll confirm the price and a start date,
-                 then you secure it with a booking fee that comes off the final bill. booking fee is 20% of the
-                 jobs total ammount.</p>
+                 then you secure it with a booking fee &mdash; 20% of the agreed price &mdash;
+                 that comes off the final bill.</p>
             {% if user.is_authenticated %}
                 <a class="bk-btn bk-btn--primary" href="{% url 'bookings:book' %}">Book a job</a>
             {% else %}

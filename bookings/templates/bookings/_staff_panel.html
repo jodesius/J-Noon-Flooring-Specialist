@@ -11,13 +11,13 @@ Context: job, confirm_form, payment_form, admin_url.
 
     {% if job.status == "requested" %}
         <p>Accept this request: set the price you and the customer agreed and the
-           start date. That moves it to <em>Awaiting booking fee</em> in their portal.</p>
+           start date. That moves it to <em>Awaiting booking fee</em> in their
+           portal &mdash; the booking fee is <strong>20% of the agreed price</strong>.</p>
         <form method="post" class="bk-form staff-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="confirm">
             {% include "bookings/_field.html" with field=confirm_form.agreed_price %}
             {% include "bookings/_field.html" with field=confirm_form.start_date %}
-            {% include "bookings/_field.html" with field=confirm_form.booking_fee %}
             {% include "bookings/_field.html" with field=confirm_form.summary %}
             {% include "bookings/_field.html" with field=confirm_form.contact_name %}
             {% include "bookings/_field.html" with field=confirm_form.contact_phone %}
@@ -33,7 +33,8 @@ Context: job, confirm_form, payment_form, admin_url.
         </form>
 
     {% elif job.status == "awaiting_deposit" %}
-        <p>Waiting on the <strong>&pound;{{ job.booking_fee|floatformat:0 }} booking fee</strong>.
+        <p>Waiting on the <strong>&pound;{{ job.booking_fee|floatformat:2 }} booking fee</strong>
+           (20% of &pound;{{ job.agreed_price|floatformat:2 }}).
            When it lands, record it here &mdash; that books the job in and the
            customer sees it move to <em>Booked</em>.</p>
         <p class="staff-panel__note">
@@ -52,7 +53,7 @@ Context: job, confirm_form, payment_form, admin_url.
                     <option value="other">Other</option>
                 </select>
             </label>
-            <button type="submit" class="bk-btn bk-btn--primary">Confirm &pound;{{ job.booking_fee|floatformat:0 }} received</button>
+            <button type="submit" class="bk-btn bk-btn--primary">Confirm &pound;{{ job.booking_fee|floatformat:2 }} received</button>
         </form>
         <form method="post" class="staff-form staff-form--inline" onsubmit="return confirm('Cancel this booking?');">
             {% csrf_token %}

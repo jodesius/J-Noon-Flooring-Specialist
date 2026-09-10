@@ -156,6 +156,12 @@ Dependencies are pinned in `requirements.txt`.
   estimate-headroom %, and a master on/off switch. `FlooringRate` is just
   the picklist of systems on the form. The fitter edits the rate card in the
   admin — no code, no redeploy — and the AI always quotes from it.
+- **"Please wait" overlay:** submitting the quote form (or the follow-up
+  answers) shows a full-screen spinner — *"Your quote is being calculated…
+  please don't close or refresh the page"* — and blocks re-submitting while
+  the AI works. Progressive enhancement (`bookings/js/quote-loading.js`); it
+  only appears once the browser sees the form as complete, so validation
+  errors still come straight back.
 - **Graceful states:** with no `ANTHROPIC_API_KEY`, an empty rate card, or
   the master switch off, the quote page invites the customer to **book a
   call** instead — nothing errors. `QUOTING_PREVIEW=1` (DEBUG only) walks the
@@ -201,11 +207,11 @@ Dependencies are pinned in `requirements.txt`.
   appears with the stage-appropriate controls (a `POST` from a non-staff
   user 404s):
   - *Booking requested* → a form to set the **agreed price**, **start
-    date**, booking fee, work summary and correct the contact details, then
-    **"Accept & confirm booking"** (→ *Awaiting booking fee*), or decline.
-  - *Awaiting booking fee* → **"Confirm £100 received"** (pick the method)
-    logs the deposit `Payment`, which moves the job to **Booked – not
-    started**.
+    date**, work summary and correct the contact details, then **"Accept &
+    confirm booking"** (→ *Awaiting booking fee*), or decline.
+  - *Awaiting booking fee* → **"Confirm £N received"** (pick the method),
+    where **N is 20% of the agreed price**, logs the deposit `Payment`,
+    which moves the job to **Booked – not started**.
   - *Booked* → **"Start work"**; *Underway* → **"Mark complete"**;
     *Complete* → reopen.
   - Any active stage → a **"Record a payment"** form and **"Issue
@@ -216,18 +222,20 @@ Dependencies are pinned in `requirements.txt`.
   how many need action, each card linking to that job's portal page.
   Reached from a staff-only **"Manage bookings"** card on `/bookings/` and
   a link on the customer projects page.
-- **The £100 booking fee** is a non-refundable deposit that secures the
-  slot and comes off the final balance. Online card payment is **not built
-  yet** (Stripe is the next stage); until then Joseph records the fee (and
-  later payments) by hand from the manage panel.
+- **The booking fee is 20% of the agreed price** (`Job.BOOKING_FEE_PERCENT`,
+  a computed property — no stored field to drift), a non-refundable deposit
+  that secures the slot and comes off the final balance. Online card payment
+  is **not built yet** (Stripe is the next stage); until then Joseph records
+  the fee (and later payments) by hand from the manage panel.
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
   or a **final invoice**, issued from the manage panel or an admin action;
   the money figures are **snapshotted at issue** so a downloaded file stays
   a true record. The header pulls the business phone / email / area from the
   Contact us settings.
 - **Models** — `Job` (slug, auto reference `JN####`, optional `QuoteRequest`
-  link, customer name / phone, address of works, agreed price, booking fee,
-  start date, status, notes), `JobPhoto` (Cloudinary-backed, file removed
+  link, customer name / phone, address of works, agreed price, start date,
+  status, notes; `booking_fee` is a computed 20% of the agreed price),
+  `JobPhoto` (Cloudinary-backed, file removed
   from storage on delete), `Payment` (amount, kind, method, date), `Invoice`
   (auto number `INV-####`, kind, snapshotted totals). `QuoteRequest` gained
   a `reference` (`JQ####`, assigned on save; a data migration backfilled
@@ -637,9 +645,9 @@ J-Flooring-Specialist/
 │   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice
 │   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage/actions, invoice PDF
 │   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits, portal access, money, invoices, staff manage
-│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields
-│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable), call, book, projects (+ detail, _staff_panel), manage, emails
-│   └── static/bookings/    # bookings.css
+│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields, 0006 drop stored booking_fee (now 20% computed)
+│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable, _loading_overlay), call, book, projects (+ detail, _staff_panel), manage, emails
+│   └── static/bookings/    # bookings.css, quote-loading.js ("please wait" overlay)
 ├── contact/                # Contact us page - details, coverage map, enquiry form
 │   ├── models.py           # SiteContact (singleton), ContactEnquiry
 │   ├── forms.py            # EnquiryForm (+ honeypot)
@@ -882,10 +890,11 @@ from **`/bookings/manage/`** and the customer's own project pages — no
    **`/bookings/manage/`** as *Booking requested*.
 2. Open it and, in the **"Manage this job"** panel, set the **agreed price**
    and **start date** and hit **Accept & confirm booking** → the customer
-   sees the terms and that the **£100 booking fee** is due.
+   sees the terms and that the **booking fee (20% of the agreed price)** is
+   due.
 3. When the fee arrives (bank transfer / cash for now — online card is the
-   next stage), hit **Confirm £100 received** → the job moves to *Booked –
-   not started*.
+   next stage), hit **Confirm £N received** → the job moves to *Booked – not
+   started*.
 4. **Start work** on the day, **Mark complete** when done. Upload work
    **photos** from the "Open in admin" link (file upload lives there).
 5. Record further **payments** with the panel's payment form, and **issue a
@@ -910,7 +919,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **100**, across `core`,
+tests where they add lasting value (currently **103**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -962,10 +971,11 @@ hit from the test suite.
   booking-fee `Payment` moves a job to *Booked* while a balance payment
   doesn't; invoice numbers are sequential; the deposit snapshot counts only
   the booking fee and the final one counts everything; the invoice PDF
-  downloads for the owner and 404s for anyone else. For **staff management**:
+  downloads for the owner and 404s for anyone else; `booking_fee` is 20% of
+  the agreed price (and `None` before it's set). For **staff management**:
   the `/bookings/manage/` dashboard lists every job and filters by status
   and 404s for a normal user; from a job page a Site Administrator can
-  confirm a booking (price + date required), record the £100 fee (which
+  confirm a booking (price + date required), record the 20% fee (which
   books the job in), start and complete it, record a payment and issue an
   invoice; a customer POSTing any of those gets a 404. (Portal photo tests
   use `InMemoryStorage`.)
@@ -991,9 +1001,9 @@ Done end-to-end for every feature so far, most recently:
   submitted, and confirmed the `Job` links the quote and the staff email
   leads with name / address of works / job; then as a staff user walked the
   whole job from the portal — `/bookings/manage/` dashboard, **Accept &
-  confirm booking** (price + date), **Confirm £100 received**, **Start
-  work** — and checked the customer sees each status change but no manage
-  panel;
+  confirm booking** (£4,820 price → the £964 booking fee shown as 20%),
+  **Confirm £964 received**, **Start work** — and checked the customer sees
+  each status change but no manage panel;
   recorded a booking-fee payment and watched the job move to *Booked*; added
   a part payment and checked the balance maths; issued a booking-fee receipt
   and a final invoice and downloaded both PDFs; uploaded work photos in the
@@ -1108,7 +1118,7 @@ shared code.
       staff confirms price + start date, job status / work photos / agreed
       price / payments / outstanding balance, downloadable PDF invoices,
       staff access to any customer's portal
-- [ ] Bookings next: Stripe — take the £100 booking fee and balance
+- [ ] Bookings next: Stripe — take the booking fee (20% of the price) and balance
       payments online through the portal (records already model card / cash
       / bank; only the online card step is left to wire up)
 - [ ] Rewards scheme

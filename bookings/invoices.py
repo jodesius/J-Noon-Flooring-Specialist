@@ -96,8 +96,8 @@ def render_invoice_pdf(invoice):
 
     rows = [["Description", "Amount"]]
     if invoice.kind == invoice.Kind.DEPOSIT:
-        rows.append(["Non-refundable booking fee (deducted from the final balance)",
-                     _money(invoice.total_paid)])
+        rows.append(["Non-refundable booking fee - 20% of the agreed price, "
+                     "deducted from the final balance", _money(invoice.total_paid)])
         rows.append(["Received", _money(invoice.total_paid)])
         totals_note = "Thank you - your booking is secured."
     else:

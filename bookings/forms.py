@@ -269,7 +269,7 @@ class ConfirmBookingForm(forms.ModelForm):
 
     class Meta:
         model = Job
-        fields = ["agreed_price", "start_date", "booking_fee", "summary",
+        fields = ["agreed_price", "start_date", "summary",
                   "site_address", "contact_name", "contact_phone"]
         widgets = {
             "start_date": forms.DateInput(attrs={"type": "date"}),

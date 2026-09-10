@@ -125,6 +125,12 @@ class QuoteFlowTests(TestCase):
     def _post(self, **extra):
         return self.client.post(reverse("bookings:quote"), base_payload(**extra))
 
+    def test_quote_form_has_please_wait_overlay(self):
+        resp = self.client.get(reverse("bookings:quote"))
+        self.assertContains(resp, 'id="bk-loading"')
+        self.assertContains(resp, "quote-loading.js")
+        self.assertContains(resp, "Your quote is being calculated")
+
     @patch("bookings.views.generate_quote")
     def test_valid_submission_creates_request_and_emails(self, mock_gen):
         mock_gen.return_value = {
@@ -161,6 +167,7 @@ class QuoteFlowTests(TestCase):
 
         follow = self.client.get(resp["Location"])
         self.assertContains(follow, "How many rooms exactly?")
+        self.assertContains(follow, "quote-loading.js")  # "please wait" overlay
 
         self.client.post(resp["Location"], {"q0": "three bedrooms"})
         qr.refresh_from_db()
@@ -560,6 +567,14 @@ class JobMoneyTests(TestCase):
     def test_reference_is_assigned(self):
         self.assertEqual(self.job.reference, f"JN{self.job.pk:04d}")
 
+    def test_booking_fee_is_20_percent_of_agreed_price(self):
+        self.assertEqual(self.job.booking_fee, Decimal("240.00"))
+        self.job.agreed_price = Decimal("1333.00")
+        self.assertEqual(self.job.booking_fee, Decimal("266.60"))
+
+    def test_booking_fee_is_none_before_price_is_set(self):
+        self.assertIsNone(Job(user=self.job.user, title="x").booking_fee)
+
     def test_balance_tracks_payments(self):
         self.assertEqual(self.job.balance_due, Decimal("1200.00"))
         Payment.objects.create(
@@ -708,7 +723,7 @@ class StaffManageTests(TestCase):
     def test_confirm_booking_from_portal(self):
         resp = self.client.post(self._detail(), {
             "action": "confirm", "agreed_price": "1500",
-            "start_date": self._future(), "booking_fee": "100",
+            "start_date": self._future(),
             "summary": "LVT to the hall", "contact_name": "Cass Customer",
             "contact_phone": "", "site_address": "1 A Street, Chelmsford",
         })
@@ -716,26 +731,25 @@ class StaffManageTests(TestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.AWAITING_DEPOSIT)
         self.assertEqual(self.job.agreed_price, Decimal("1500"))
+        self.assertEqual(self.job.booking_fee, Decimal("300.00"))  # 20%
         self.assertIsNotNone(self.job.confirmed_at)
 
     def test_confirm_needs_price_and_date(self):
         self.client.post(self._detail(), {
             "action": "confirm", "agreed_price": "", "start_date": "",
-            "booking_fee": "100",
         })
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.REQUESTED)
 
-    def test_record_fee_books_the_job_in(self):
+    def test_record_fee_books_the_job_in_at_20_percent(self):
         Job.objects.filter(pk=self.job.pk).update(
             status=Job.Status.AWAITING_DEPOSIT, agreed_price=Decimal("1500"),
         )
         self.client.post(self._detail(), {"action": "record_fee", "method": "bank"})
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.NOT_STARTED)
-        self.assertTrue(
-            self.job.payments.filter(kind=Payment.Kind.BOOKING_FEE).exists()
-        )
+        fee = self.job.payments.get(kind=Payment.Kind.BOOKING_FEE)
+        self.assertEqual(fee.amount, Decimal("300.00"))
 
     def test_start_then_complete(self):
         Job.objects.filter(pk=self.job.pk).update(

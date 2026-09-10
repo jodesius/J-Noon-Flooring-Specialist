@@ -189,14 +189,14 @@ class JobAdmin(admin.ModelAdmin):
     readonly_fields = (
         "reference", "slug", "user", "quote_request", "customer_note",
         "created_at", "updated_at", "confirmed_at",
-        "total_paid_display", "balance_display",
+        "booking_fee_display", "total_paid_display", "balance_display",
     )
     fieldsets = (
         ("Customer", {"fields": ("user", "contact_name", "contact_phone",
                                  "quote_request", "customer_note")}),
         ("The job", {"fields": ("title", "summary", "site_address")}),
         ("Agreed terms", {
-            "fields": ("agreed_price", "booking_fee", "start_date",
+            "fields": ("agreed_price", "start_date", "booking_fee_display",
                        "total_paid_display", "balance_display"),
         }),
         ("Status", {"fields": ("status", "staff_notes", "reference",
@@ -207,6 +207,11 @@ class JobAdmin(admin.ModelAdmin):
     @admin.display(description="customer")
     def customer(self, obj):
         return obj.contact_name or obj.user.get_username()
+
+    @admin.display(description="booking fee (20% of agreed price)")
+    def booking_fee_display(self, obj):
+        fee = obj.booking_fee
+        return f"£{fee:.2f}" if fee is not None else "— (set the agreed price)"
 
     @admin.display(description="balance")
     def balance_display(self, obj):
