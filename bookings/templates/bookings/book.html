@@ -1,0 +1,61 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Book a job{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+    <header class="bookings-page__head">
+        <h1>Book a job</h1>
+        <p>Tell me which job you'd like to go ahead with. I'll confirm the price and a
+           start date with you, then you can secure the booking in your projects.</p>
+    </header>
+
+    <div class="bookings-card">
+        <form method="post" novalidate class="bk-form">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="bk-form__errors">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="hp" aria-hidden="true">
+                <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
+                {{ form.website }}
+            </div>
+
+            <fieldset class="bk-form__group">
+                <legend>From a quote?</legend>
+                {% include "bookings/_field.html" with field=form.quote_reference %}
+            </fieldset>
+
+            <fieldset class="bk-form__group">
+                <legend>The booking</legend>
+                {% include "bookings/_field.html" with field=form.contact_name %}
+                {% include "bookings/_field.html" with field=form.contact_phone %}
+                {% include "bookings/_field.html" with field=form.site_address %}
+                {% include "bookings/_field.html" with field=form.title %}
+                {% include "bookings/_field.html" with field=form.customer_note %}
+            </fieldset>
+
+            <p class="bk-form__disclaimer">
+                Sending this doesn't charge you anything. The &pound;100 booking fee is
+                only taken once we've agreed the price and date &mdash; it's
+                non-refundable and comes off your final invoice.
+            </p>
+
+            <button type="submit" class="bk-btn bk-btn--primary">Send booking request</button>
+        </form>
+    </div>
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
+    </p>
+</section>
+{% endblock %}

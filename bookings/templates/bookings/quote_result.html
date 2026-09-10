@@ -47,6 +47,16 @@
                 This is a <strong>rough estimate, not a binding quote.</strong> The real
                 figure depends on a site visit &mdash; I'll be in touch to arrange one.
             </p>
+
+            <p class="quote-result__ref">
+                Your quote reference: <strong>{{ qr.reference }}</strong>
+            </p>
+            <a class="bk-btn bk-btn--primary"
+               href="{% url 'bookings:book' %}?quote={{ qr.reference }}">Book this job</a>
+            <p class="quote-result__ref-note">
+                Happy with this? Book it in and I'll carry your answers over &mdash;
+                no need to fill everything in again.
+            </p>
         </div>
 
     {% else %}
@@ -59,6 +69,9 @@
             </p>
             <p class="bk-form__disclaimer">
                 Your request is saved. If you need me sooner, give me a call.
+            </p>
+            <p class="quote-result__ref">
+                Your quote reference: <strong>{{ qr.reference }}</strong>
             </p>
         </div>
     {% endif %}

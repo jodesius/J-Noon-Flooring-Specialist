@@ -1,0 +1,22 @@
+A customer has asked to book a job through the website.
+
+CUSTOMER NAME:    {{ job.contact_name|default:"(not given)" }}
+PHONE:            {{ job.contact_phone|default:"(not given)" }}
+ADDRESS OF WORKS: {{ job.site_address|default:"(not given)" }}
+THE JOB:          {{ job.title }}
+
+Booking ref:      {{ job.reference }}
+Booked by:        {{ job.user.get_username }} ({{ job.user.email }})
+{% if job.quote_request %}
+From online quote {{ job.quote_request.reference }}.{% if job.quote_request.quote_low %} Their estimate was £{{ job.quote_request.quote_low|floatformat:0 }}-£{{ job.quote_request.quote_high|floatformat:0 }}.{% endif %}
+Full quote answers: {{ quote_url }}
+{% else %}
+Not from an online quote.
+{% endif %}{% if job.customer_note %}
+Their message:
+{{ job.customer_note }}
+{% endif %}
+Next step: open the job in the admin, set the agreed price and start date,
+then run "Confirm booking" so they can pay the booking fee.
+
+{{ url }}

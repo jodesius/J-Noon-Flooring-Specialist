@@ -234,8 +234,238 @@
     line-height: 1.5;
     font-size: 0.95rem;
 }
+.quote-result__ref {
+    background: #f6f1ea;
+    border: 1px dashed #c8a27c;
+    border-radius: 6px;
+    padding: 0.7rem 0.9rem;
+    text-align: center;
+    font-size: 0.95rem;
+    margin: 0 0 1rem;
+}
+.quote-result__ref strong {
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+    color: #5a3b28;
+}
+.quote-result__ref-note {
+    font-size: 0.85rem;
+    color: #6b6b6b;
+    margin: 0.75rem 0 0;
+}
+
+/* ---------- Your projects (portal) ---------- */
+.bk-btn--sm { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
+
+.job-staffbar {
+    background: #3f2a1c;
+    color: #f0e4d6;
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    margin-top: 0;
+}
+.job-staffbar a { color: #ffd8a8; white-space: nowrap; }
+
+.job-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.25rem;
+}
+.job-list .bookings-card { margin-top: 0; }
+.job-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.job-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28); }
+.job-card__ref {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a6b4f;
+}
+.job-card__title { font-size: 1.1rem; font-weight: 700; color: #5a3b28; }
+.job-card__meta { font-size: 0.85rem; color: #6b6b6b; }
+
+/* status pill */
+.job-status {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    align-self: flex-start;
+}
+.job-status--requested,
+.job-status--awaiting_deposit { background: #f4e2c4; color: #7a541c; }
+.job-status--not_started { background: #dfe7d5; color: #4a5a34; }
+.job-status--underway { background: #cfe0ef; color: #274a63; }
+.job-status--complete { background: #cde8d3; color: #1f5a34; }
+.job-status--cancelled { background: #ece0dd; color: #7a3b31; }
+
+/* progress bar */
+.job-progress {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    gap: 0.5rem;
+    counter-reset: step;
+}
+.job-progress li {
+    flex: 1;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #9a8c7c;
+    padding-top: 1.9rem;
+    position: relative;
+}
+.job-progress li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.6rem;
+    height: 1.6rem;
+    line-height: 1.6rem;
+    border-radius: 50%;
+    background: #e7ded3;
+    color: #8a7c6c;
+}
+.job-progress li::after {
+    content: "";
+    position: absolute;
+    top: 0.8rem;
+    left: -50%;
+    width: 100%;
+    height: 2px;
+    background: #e7ded3;
+    z-index: -1;
+}
+.job-progress li:first-child::after { display: none; }
+.job-progress li.is-done { color: #5a3b28; }
+.job-progress li.is-done::before { background: #8b4b07; color: #fff; }
+.job-progress li.is-done::after { background: #8b4b07; }
+
+.job-startline { margin-top: 1rem; }
+
+.job-money th { font-weight: 500; }
+.job-money__due th, .job-money__due td {
+    font-weight: 800;
+    color: #5a3b28;
+    border-top-width: 2px;
+}
+.job-payments thead th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a6b4f;
+    border-top: 0;
+}
+.job-payments td { text-align: left; white-space: normal; font-weight: 400; }
+.job-payments td:last-child { text-align: right; white-space: nowrap; font-weight: 700; }
+
+.job-invoices { list-style: none; margin: 0; padding: 0; }
+.job-invoices li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.job-invoices li:first-child { border-top: 0; }
+.job-invoices small { color: #6b6b6b; }
+
+.job-photos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.9rem;
+}
+.job-photos figure { margin: 0; }
+.job-photos img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+}
+.job-photos figcaption {
+    font-size: 0.8rem;
+    color: #6b6b6b;
+    margin-top: 0.35rem;
+}
+
+/* ---------- Staff: manage bookings + on-portal controls ---------- */
+.bookings-card--staff { border-left: 4px solid #8b4b07; }
+
+.manage-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+.manage-chip {
+    display: inline-block;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #f0e4d6;
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+.manage-chip:hover { background: rgba(255, 255, 255, 0.24); }
+.manage-chip.is-on { background: #fff; color: #5a3b28; font-weight: 700; }
+
+.staff-panel { border: 2px solid #8b4b07; }
+.staff-panel h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    color: #5a3b28;
+}
+.staff-panel__status { font-size: 0.95rem; }
+.staff-panel__note {
+    font-size: 0.85rem;
+    color: #6b6b6b;
+    background: #f6f1ea;
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+}
+.staff-panel__rule {
+    border: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    margin: 1.4rem 0;
+}
+.staff-panel__admin { font-size: 0.9rem; margin: 0; }
+.staff-panel__buttons { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+.staff-form { margin-bottom: 1rem; }
+.staff-form__actions { margin-top: 0.5rem; }
+.staff-form--inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0 0.6rem 0.6rem 0;
+}
+.staff-form--inline select {
+    font: inherit;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #c7bdb1;
+    border-radius: 6px;
+    background: #fdfbf9;
+}
 
 @media (max-width: 520px) {
     .bk-btn { align-self: stretch; text-align: center; }
     .bookings-gate__actions .bk-btn { flex: 1; }
+    .job-invoices li { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 }

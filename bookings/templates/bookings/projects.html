@@ -1,0 +1,48 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Your projects{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page">
+    <header class="bookings-page__head">
+        <h1>Your projects</h1>
+        <p>Every job you've booked with me, and where each one's up to.</p>
+        {% if user.is_site_admin %}
+            <p><a class="bk-btn bk-btn--ghost bk-btn--sm" href="{% url 'bookings:manage' %}">Staff: manage all bookings &rarr;</a></p>
+        {% endif %}
+    </header>
+
+    {% if not jobs %}
+        <div class="bookings-card">
+            <p>You haven't booked any jobs yet. Once you've had a quote and you're happy
+               with it, use <strong>Book a job</strong> and it'll show up here.</p>
+            <a class="bk-btn bk-btn--primary" href="{% url 'bookings:book' %}">Book a job</a>
+        </div>
+    {% else %}
+        <div class="job-list">
+            {% for job in jobs %}
+                <a class="bookings-card job-card" href="{% url 'bookings:project_detail' slug=job.slug %}">
+                    <span class="job-card__ref">{{ job.reference }}</span>
+                    <span class="job-card__title">{{ job.title }}</span>
+                    <span class="job-status job-status--{{ job.status }}">{{ job.get_status_display }}</span>
+                    <span class="job-card__meta">
+                        {% if job.agreed_price %}Agreed &pound;{{ job.agreed_price|floatformat:0 }}{% else %}Price to be confirmed{% endif %}
+                        {% if job.start_date %} &middot; starts {{ job.start_date|date:"j M Y" }}{% endif %}
+                    </span>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
+    </p>
+</section>
+{% endblock %}

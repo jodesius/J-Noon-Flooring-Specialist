@@ -1,0 +1,165 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | {{ job.reference }} {{ job.title }}{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page bookings-page--narrow">
+
+    {% if viewing_as_staff %}
+        <div class="job-staffbar">
+            You're viewing <strong>{{ job.user.get_username }}</strong>'s project as staff.
+            <a href="{% url 'bookings:manage' %}">All bookings &rarr;</a>
+        </div>
+    {% endif %}
+
+    <header class="bookings-page__head">
+        <h1>{{ job.title }}</h1>
+        <p>Job {{ job.reference }}
+            {% if job.site_address %} &middot; {{ job.site_address }}{% endif %}</p>
+    </header>
+
+    {% if can_manage %}
+        {% include "bookings/_staff_panel.html" %}
+    {% endif %}
+
+    {# ---- status ---------------------------------------------------- #}
+    <div class="bookings-card">
+        <h2>Status</h2>
+
+        {% if job.status == "requested" %}
+            <p><span class="job-status job-status--requested">Booking requested</span></p>
+            <p>Thanks for asking to book this in. I'll be in touch to confirm the price
+               and a start date. Once that's agreed you'll be able to secure the
+               booking here.</p>
+
+        {% elif job.status == "awaiting_deposit" %}
+            <p><span class="job-status job-status--awaiting_deposit">Awaiting booking fee</span></p>
+            <p>We've agreed the details below. To lock in your slot, the
+               <strong>&pound;{{ job.booking_fee|floatformat:0 }} booking fee</strong> is
+               now due. It's non-refundable and comes straight off your final invoice.</p>
+            <p class="bk-form__disclaimer">
+                Card payments through the portal are coming soon. For now I'll take the
+                booking fee by bank transfer or cash and mark it here as soon as it
+                lands &mdash; then this job moves to <em>Booked</em>.
+            </p>
+
+        {% elif job.status == "cancelled" %}
+            <p><span class="job-status job-status--cancelled">Cancelled</span></p>
+            <p>This booking was cancelled. Any booking fee already paid is
+               non-refundable, as agreed.</p>
+
+        {% else %}
+            <ol class="job-progress" data-step="{{ job.status_step }}">
+                <li class="{% if job.status_step >= 1 %}is-done{% endif %}">Booked</li>
+                <li class="{% if job.status_step >= 2 %}is-done{% endif %}">Underway</li>
+                <li class="{% if job.status_step >= 3 %}is-done{% endif %}">Complete</li>
+            </ol>
+            {% if job.start_date %}
+                <p class="job-startline">
+                    {% if job.status == "complete" %}Completed job.
+                    {% else %}Start date: <strong>{{ job.start_date|date:"l j F Y" }}</strong>{% endif %}
+                </p>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    {# ---- what the job is ------------------------------------------- #}
+    {% if job.summary %}
+        <div class="bookings-card">
+            <h2>The work</h2>
+            <p>{{ job.summary|linebreaksbr }}</p>
+        </div>
+    {% endif %}
+
+    {# ---- money --------------------------------------------------- #}
+    {% if job.agreed_price %}
+        <div class="bookings-card">
+            <h2>Costs</h2>
+            <table class="quote-result__breakdown job-money">
+                <tbody>
+                    <tr><th>Agreed price</th><td>&pound;{{ job.agreed_price|floatformat:2 }}</td></tr>
+                    <tr><th>Paid so far</th><td>&pound;{{ job.total_paid|floatformat:2 }}</td></tr>
+                    <tr class="job-money__due">
+                        <th>Balance outstanding</th>
+                        <td>&pound;{{ job.balance_due|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            {% if job.balance_due > 0 and job.is_live %}
+                <p class="bk-form__disclaimer">
+                    Pay the balance when the work's done, or as we've agreed. Online card
+                    payment is coming soon; until then it's bank transfer or cash.
+                </p>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {# ---- payments ------------------------------------------------ #}
+    {% if payments %}
+        <div class="bookings-card">
+            <h2>Payments</h2>
+            <table class="quote-result__breakdown job-payments">
+                <thead>
+                    <tr><th>Date</th><th>For</th><th>Method</th><th>Amount</th></tr>
+                </thead>
+                <tbody>
+                    {% for p in payments %}
+                        <tr>
+                            <td>{{ p.received_on|date:"j M Y" }}</td>
+                            <td>{{ p.get_kind_display }}</td>
+                            <td>{{ p.get_method_display }}</td>
+                            <td>&pound;{{ p.amount|floatformat:2 }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+    {# ---- invoices ---------------------------------------------- #}
+    {% if invoices %}
+        <div class="bookings-card">
+            <h2>Invoices</h2>
+            <ul class="job-invoices">
+                {% for inv in invoices %}
+                    <li>
+                        <span>{{ inv.get_kind_display }} &mdash; {{ inv.number }}
+                            <small>({{ inv.issued_on|date:"j M Y" }})</small></span>
+                        <a class="bk-btn bk-btn--ghost bk-btn--sm"
+                           href="{% url 'bookings:invoice_pdf' slug=job.slug number=inv.number %}"
+                           target="_blank" rel="noopener">Download PDF</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {# ---- photos ---------------------------------------------- #}
+    {% if photos %}
+        <div class="bookings-card">
+            <h2>Photos of the work</h2>
+            <div class="job-photos">
+                {% for photo in photos %}
+                    <figure>
+                        <a href="{{ photo.full_url }}" target="_blank" rel="noopener">
+                            <img src="{{ photo.thumb_url }}" alt="{{ photo.caption }}" loading="lazy">
+                        </a>
+                        {% if photo.caption %}<figcaption>{{ photo.caption }}</figcaption>{% endif %}
+                    </figure>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:projects' %}">&larr; All projects</a>
+    </p>
+</section>
+{% endblock %}

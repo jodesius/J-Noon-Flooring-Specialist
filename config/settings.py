@@ -270,3 +270,8 @@ GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 BOOKINGS_TIMEZONE = os.environ.get("BOOKINGS_TIMEZONE", "Europe/London")
 CALL_DAILY_LIMIT = int(os.environ.get("CALL_DAILY_LIMIT", "3"))
+
+
+# Customer portal ("Your projects")
+# How many booking requests one signed-in user may send per day.
+JOB_REQUEST_DAILY_LIMIT = int(os.environ.get("JOB_REQUEST_DAILY_LIMIT", "3"))

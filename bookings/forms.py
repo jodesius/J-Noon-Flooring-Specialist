@@ -1,7 +1,7 @@
 from django import forms
 from django.utils import timezone
 
-from .models import CallRequest, FlooringRate, QuoteRequest
+from .models import CallRequest, FlooringRate, Job, Payment, QuoteRequest
 
 
 class QuoteStartForm(forms.ModelForm):
@@ -154,6 +154,151 @@ class CallRequestForm(forms.ModelForm):
         if date > today + timezone.timedelta(days=21):
             raise forms.ValidationError("Please pick a day within the next three weeks.")
         return date
+
+
+class BookJobForm(forms.ModelForm):
+    """Customer asks to book a job. Joseph then sets the price and confirms.
+
+    Pasting a quote reference (`QuoteRequest.reference`) links that quote and
+    fills any field the customer left blank from their quote answers.
+    """
+
+    website = forms.CharField(  # honeypot
+        required=False, label="Leave this field blank",
+        widget=forms.TextInput(attrs={"autocomplete": "off", "tabindex": "-1"}),
+    )
+    quote_reference = forms.CharField(
+        required=False, label="Quote reference",
+        widget=forms.TextInput(
+            attrs={"placeholder": "e.g. JQ0007", "autocapitalize": "characters"}
+        ),
+    )
+
+    # Filled in by clean() so the view can link it to the new Job.
+    matched_quote = None
+
+    class Meta:
+        model = Job
+        fields = ["title", "site_address", "contact_name", "contact_phone",
+                  "customer_note"]
+        widgets = {
+            "title": forms.TextInput(
+                attrs={"placeholder": "e.g. LVT to the kitchen and hallway"}
+            ),
+            "site_address": forms.Textarea(
+                attrs={"rows": 2, "placeholder": "House / flat, street, town, postcode"}
+            ),
+            "customer_note": forms.Textarea(
+                attrs={"rows": 4, "placeholder": "Anything you'd like me to know - "
+                       "preferred start dates, access, questions about the quote…"}
+            ),
+        }
+        labels = {
+            "title": "What's the job?",
+            "site_address": "Address where the work is",
+            "contact_name": "Your name",
+            "contact_phone": "Phone number",
+            "customer_note": "Message (optional)",
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.matched_quote = None
+        self.fields["quote_reference"].help_text = (
+            "Had a quote online? Paste its reference and I'll bring your answers "
+            "across so you don't retype them. No quote? Just leave it blank."
+        )
+        # Enforced in clean(), after any prefill from the quote.
+        for name in ("title", "site_address", "contact_name"):
+            self.fields[name].required = False
+        self.fields["site_address"].help_text = (
+            "Full address - house / flat, street, town and postcode."
+        )
+        self.fields["customer_note"].help_text = ""
+
+    def clean_website(self):
+        if self.cleaned_data.get("website"):
+            raise forms.ValidationError("This request could not be sent.")
+        return ""
+
+    def clean_quote_reference(self):
+        ref = (self.cleaned_data.get("quote_reference") or "").strip().upper()
+        if not ref:
+            return ""
+        self.matched_quote = QuoteRequest.objects.filter(
+            reference__iexact=ref, user=self.user
+        ).first()
+        if self.matched_quote is None:
+            raise forms.ValidationError(
+                "I couldn't find a quote with that reference on your account. "
+                "Check the code, or leave it blank and fill the details in below."
+            )
+        return ref
+
+    def clean(self):
+        cleaned = super().clean()
+        quote = self.matched_quote
+        if quote:
+            if not cleaned.get("title"):
+                cleaned["title"] = quote.suggested_job_title
+            if not cleaned.get("contact_name"):
+                cleaned["contact_name"] = quote.contact_name
+            if not cleaned.get("contact_phone"):
+                cleaned["contact_phone"] = quote.contact_phone
+            if not cleaned.get("site_address"):
+                cleaned["site_address"] = quote.postcode
+
+        for name in ("title", "contact_name"):
+            if cleaned.get(name):
+                cleaned[name] = cleaned[name].strip()
+
+        for name, message in (
+            ("title", "Tell me what the job is, or paste a quote reference above."),
+            ("contact_name", "I need a name for the booking."),
+            ("site_address", "I need the address where the work is."),
+        ):
+            if not (cleaned.get(name) or "").strip():
+                self.add_error(name, message)
+        return cleaned
+
+
+class ConfirmBookingForm(forms.ModelForm):
+    """Staff-only: on the customer's portal page, set the agreed terms and
+    accept a booking request."""
+
+    class Meta:
+        model = Job
+        fields = ["agreed_price", "start_date", "booking_fee", "summary",
+                  "site_address", "contact_name", "contact_phone"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "summary": forms.Textarea(attrs={"rows": 3}),
+            "site_address": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("agreed_price") is None:
+            self.add_error("agreed_price", "Set the agreed price to confirm the booking.")
+        if not cleaned.get("start_date"):
+            self.add_error("start_date", "Set a start date to confirm the booking.")
+        return cleaned
+
+
+class RecordPaymentForm(forms.ModelForm):
+    """Staff-only: log a payment the customer has made (cash / bank / card)."""
+
+    class Meta:
+        model = Payment
+        fields = ["amount", "kind", "method", "received_on", "reference", "note"]
+        widgets = {"received_on": forms.DateInput(attrs={"type": "date"})}
+
+    def clean_amount(self):
+        amount = self.cleaned_data["amount"]
+        if amount is None or amount <= 0:
+            raise forms.ValidationError("Enter an amount greater than zero.")
+        return amount
 
 
 class FollowUpForm(forms.Form):

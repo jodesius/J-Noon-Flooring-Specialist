@@ -38,11 +38,15 @@ A multi-page Django site with:
   "How we work" section, and a "What we do" section), a **work gallery**
   (filterable masonry grid + lightbox, photos managed in the admin), a
   **Contact us** page (admin-managed details, coverage map, enquiry form),
-  and two **Bookings** features: an **AI-assisted free quote** (a signed-in
+  and three **Bookings** features: an **AI-assisted free quote** (a signed-in
   customer answers a short form and Claude produces a rough estimate, asks
-  follow-ups, or refers the job to a call, from an admin-managed rate card)
-  and **book a call-back** (name + phone + a day and time → a 30-minute
-  event lands on the fitter's Google Calendar with reminders).
+  follow-ups, or refers the job to a call, from an admin-managed rate card),
+  **book a call-back** (name + phone + a day and time → a 30-minute
+  event lands on the fitter's Google Calendar with reminders), and a
+  **customer project portal** ("Your projects" — a signed-in customer books
+  a job, Joseph confirms the price and start date, and from then on the
+  portal shows job status, work photos, the agreed price, payments recorded
+  against it and the outstanding balance, plus downloadable PDF invoices).
 - A **client reviews** feature with **full CRUD** (create / read / update /
   delete): signed-in customers post postcard-style reviews with a star
   rating and an optional photo, and can edit or delete their own. Every
@@ -73,6 +77,7 @@ credentials live in the repository.
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map, with OpenStreetMap tiles — no API key |
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
 | Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
+| PDF | `reportlab` — generates the customer portal's downloadable invoices |
 
 Dependencies are pinned in `requirements.txt`.
 
@@ -108,8 +113,8 @@ Dependencies are pinned in `requirements.txt`.
 ### Bookings (`bookings`)
 
 - **`/bookings/`** — landing page. Signed out: a *sign in / register* gate.
-  Signed in: **Get a free quote** and **Book a call-back** cards (both
-  built), plus a greyed-out **Your projects** card (customer portal, next up).
+  Signed in: **Get a free quote**, **Book a call-back**, **Book a job** and
+  **Your projects** cards.
 
 **Book a call-back — `/bookings/call/`** (`@login_required`)
 
@@ -141,6 +146,9 @@ Dependencies are pinned in `requirements.txt`.
   - The business gets an **email** for every request; all requests show in
     the admin (`QuoteRequest`, read-only form data + the full AI result +
     an editable status and staff notes).
+  - Every quote is given a short **reference** (`JQ####`) shown on the
+    estimate page and a **"Book this job"** button — see the customer portal
+    below.
 - **The rate card is admin data.** `QuoteSettings.rate_card` is a single
   free-text field (seeded with J-Noon's real prices — labour rates, pattern
   floors, subfloor prep, how materials work for supply & fit); the AI reads
@@ -161,6 +169,71 @@ Dependencies are pinned in `requirements.txt`.
   says so, and structured JSON output is validated server-side); the form
   is login-gated, honeypot-protected, and capped at `QUOTE_DAILY_LIMIT`
   (default 5) requests per user per day.
+
+**Your projects (customer portal)**
+
+- **Every online quote gets a short reference** (`QuoteRequest.reference`,
+  e.g. `JQ0007`) shown on the estimate page. It's for the customer to quote
+  when they book — not a secret (the UUID slug still guards the quote
+  itself).
+- **Book a job — `/bookings/book/`** (`@login_required`) — the customer
+  gives their **name**, the **address of works**, and **what the job is**,
+  plus an optional note. If they had an online quote they can **paste its
+  reference** (or arrive via the "Book this job" button, which passes
+  `?quote=JQ0007`): the form then links that quote and **fills any field
+  they left blank** from their quote answers — name, phone, postcode, a
+  suggested job title — so they don't retype it. Anything they do type
+  wins. A reference that isn't one of their own quotes is rejected with a
+  form error. This creates a `Job` in status **Booking requested** and
+  emails the business a clearly-labelled summary (customer name, address of
+  works, the job, the linked quote). No payment is taken at this point.
+  Honeypot-guarded, `JOB_REQUEST_DAILY_LIMIT` (default 3) per user per day.
+- **`/bookings/projects/`** (`@login_required`) lists the signed-in
+  customer's jobs. **`/bookings/projects/<uuid>/`** shows one job: a
+  not-started → underway → complete progress bar, the work summary, the
+  agreed price / paid-so-far / outstanding balance, a table of every
+  payment, downloadable **PDF invoices**, and a grid of **work photos**
+  Joseph uploads through the admin. UUID slugs and an owner-or-staff check
+  on every view — no id is ever exposed and one account can't reach
+  another's project.
+- **Joseph runs the whole job from that same portal page.** When a Site
+  Administrator opens any customer's project, a **"Manage this job"** panel
+  appears with the stage-appropriate controls (a `POST` from a non-staff
+  user 404s):
+  - *Booking requested* → a form to set the **agreed price**, **start
+    date**, booking fee, work summary and correct the contact details, then
+    **"Accept & confirm booking"** (→ *Awaiting booking fee*), or decline.
+  - *Awaiting booking fee* → **"Confirm £100 received"** (pick the method)
+    logs the deposit `Payment`, which moves the job to **Booked – not
+    started**.
+  - *Booked* → **"Start work"**; *Underway* → **"Mark complete"**;
+    *Complete* → reopen.
+  - Any active stage → a **"Record a payment"** form and **"Issue
+    booking-fee receipt" / "Issue final invoice"** buttons.
+  - A link to the admin for photo uploads and anything fiddlier.
+- **`/bookings/manage/`** (Site Administrators only, 404 otherwise) — a
+  dashboard of **every** booking with status-filter chips and a count of
+  how many need action, each card linking to that job's portal page.
+  Reached from a staff-only **"Manage bookings"** card on `/bookings/` and
+  a link on the customer projects page.
+- **The £100 booking fee** is a non-refundable deposit that secures the
+  slot and comes off the final balance. Online card payment is **not built
+  yet** (Stripe is the next stage); until then Joseph records the fee (and
+  later payments) by hand from the manage panel.
+- **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
+  or a **final invoice**, issued from the manage panel or an admin action;
+  the money figures are **snapshotted at issue** so a downloaded file stays
+  a true record. The header pulls the business phone / email / area from the
+  Contact us settings.
+- **Models** — `Job` (slug, auto reference `JN####`, optional `QuoteRequest`
+  link, customer name / phone, address of works, agreed price, booking fee,
+  start date, status, notes), `JobPhoto` (Cloudinary-backed, file removed
+  from storage on delete), `Payment` (amount, kind, method, date), `Invoice`
+  (auto number `INV-####`, kind, snapshotted totals). `QuoteRequest` gained
+  a `reference` (`JQ####`, assigned on save; a data migration backfilled
+  existing rows). All managed from the `Job` admin page with inlines; `Job`
+  and `Invoice` can't be hand-added (jobs start as a customer request;
+  invoices are created by the issue actions).
 
 ### Contact us (`contact`)
 
@@ -313,6 +386,12 @@ Three access tiers, using Django's built-in auth:
   form data + full AI result, with an editable status and staff notes).
   `CallRequest` (call-back requests) is read-only too, with status + notes
   and an "on calendar?" indicator.
+- **The customer portal** is mostly run from the site itself
+  (`/bookings/manage/` + each job's page — see the Bookings section), not
+  the admin. The `Job` admin page is still there for `JobPhoto` uploads and
+  bulk edits, with `Payment` / `Invoice` inlines and a **Confirm booking**
+  action mirroring the on-site one. `Job` and `Invoice` can't be hand-added;
+  deleting a job clears its photo files from storage.
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
   every permission for the project's own apps and **none** for Django's
@@ -549,16 +628,17 @@ J-Flooring-Specialist/
 │   ├── migrations/         # 0001 initial, 0002 seed starter categories
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
-├── bookings/               # bookings landing + AI-assisted quote
-│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest
+├── bookings/               # bookings landing + AI quote + call-back + portal
+│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, Payment, Invoice
 │   ├── quoting.py          # rate card -> Claude -> parsed/validated estimate
 │   ├── calendar_sync.py    # CallRequest -> Google Calendar event (service account)
-│   ├── forms.py            # QuoteStartForm, CallRequestForm (+ honeypots), FollowUpForm
-│   ├── admin.py            # rate card + settings + read-only Quote/Call requests
-│   ├── views.py            # landing, quote form + follow-up + result, call form
-│   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits
-│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest
-│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable), call, emails
+│   ├── invoices.py         # Invoice -> PDF (reportlab)
+│   ├── forms.py            # QuoteStartForm, CallRequestForm, BookJobForm, ConfirmBookingForm, RecordPaymentForm, FollowUpForm
+│   ├── admin.py            # rate card + settings + read-only Quote/Call requests + Job/Invoice
+│   ├── views.py            # landing, quote flow, call, book a job, portal + staff manage/actions, invoice PDF
+│   ├── tests.py            # gates, flows (mocked AI + calendar), sanity check, limits, portal access, money, invoices, staff manage
+│   ├── migrations/         # 0001 initial, 0002 seed rate card, 0003 CallRequest, 0004 Job/Invoice/JobPhoto/Payment, 0005 quote reference + job contact fields
+│   ├── templates/bookings/ # index, quote (+ followup/result/unavailable), call, book, projects (+ detail, _staff_panel), manage, emails
 │   └── static/bookings/    # bookings.css
 ├── contact/                # Contact us page - details, coverage map, enquiry form
 │   ├── models.py           # SiteContact (singleton), ContactEnquiry
@@ -658,6 +738,7 @@ development. See `.env.example` for the template.
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | No | The service-account key: the whole JSON on one line, or a path to the `.json` file. Without this (and `GOOGLE_CALENDAR_ID`), call-backs are just saved + emailed. |
 | `BOOKINGS_TIMEZONE` | No | Timezone for calendar events. Default `Europe/London`. |
 | `CALL_DAILY_LIMIT` | No | Call-back requests one signed-in user may send per day. Default `3`. |
+| `JOB_REQUEST_DAILY_LIMIT` | No | "Book a job" requests one signed-in customer may send per day. Default `3`. |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
 via SMTP; otherwise it is printed to the `runserver` console.
@@ -746,8 +827,9 @@ stragglers out of Cloudinary.
 
 ## Turning on the bookings features
 
-Both work without their integration configured — a quote request falls back
-to "book a call", a call-back is still saved and emailed. To switch the
+The AI quote and call-back both work without their integration configured —
+a quote request falls back to "book a call", a call-back is still saved and
+emailed. The project portal needs no external service at all. To switch the
 integrations on:
 
 ### AI quotes
@@ -786,6 +868,35 @@ review them in **Bookings → Quote requests**.
 Every call-back is saved as a `CallRequest` and emailed regardless; the
 calendar event is a bonus. Review them in **Bookings → Call requests**.
 
+### Customer project portal
+
+No configuration needed — it works out of the box (`reportlab`, in
+`requirements.txt`, generates the invoice PDFs). Everything below is done
+from **`/bookings/manage/`** and the customer's own project pages — no
+`/admin/` needed except for uploading work photos.
+
+1. A customer sends a **booking request** from **Book a job** (pasting their
+   `JQ####` quote reference, or via the "Book this job" button on their
+   estimate, pulls their quote answers across); you get an email — customer
+   name, address of works, the job — and the booking shows on
+   **`/bookings/manage/`** as *Booking requested*.
+2. Open it and, in the **"Manage this job"** panel, set the **agreed price**
+   and **start date** and hit **Accept & confirm booking** → the customer
+   sees the terms and that the **£100 booking fee** is due.
+3. When the fee arrives (bank transfer / cash for now — online card is the
+   next stage), hit **Confirm £100 received** → the job moves to *Booked –
+   not started*.
+4. **Start work** on the day, **Mark complete** when done. Upload work
+   **photos** from the "Open in admin" link (file upload lives there).
+5. Record further **payments** with the panel's payment form, and **issue a
+   booking-fee receipt / final invoice** with its buttons — the customer
+   downloads them as PDFs from their portal.
+
+The **Manage bookings** dashboard lists every job with status filters; you
+can also open any customer's page directly (a banner reminds you you're
+viewing as staff). All of this is limited to **Site Administrators** — a
+normal customer who tries to POST a staff action gets a 404.
+
 ---
 
 ## Running the test suite
@@ -799,7 +910,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **58**, across `core`,
+tests where they add lasting value (currently **100**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -837,7 +948,27 @@ hit from the test suite.
   downgrades an implausible AI quote; and — for call-backs — a booking saves
   a `CallRequest`, creates a calendar event and emails; it still works when
   the calendar isn't configured; past dates, the honeypot and the daily
-  limits are all rejected; one user can't open another's quote.
+  limits are all rejected; one user can't open another's quote. For the
+  **customer portal**: a booking request creates a `Job` and emails (with
+  the customer name, address of works and job title in the body); the
+  honeypot and daily limit hold; name and address are required when there's
+  no quote; every quote gets a `JQ####` reference shown on the estimate
+  page; `?quote=` prefills the booking form and ignores another user's
+  reference; pasting a valid reference links the quote and backfills blank
+  fields (case-insensitively) while typed values win; an unknown or
+  someone-else's reference is rejected; the projects list and detail views
+  are login-gated and
+  owner-or-staff only (another user gets a 404, staff see any); a
+  booking-fee `Payment` moves a job to *Booked* while a balance payment
+  doesn't; invoice numbers are sequential; the deposit snapshot counts only
+  the booking fee and the final one counts everything; the invoice PDF
+  downloads for the owner and 404s for anyone else. For **staff management**:
+  the `/bookings/manage/` dashboard lists every job and filters by status
+  and 404s for a normal user; from a job page a Site Administrator can
+  confirm a booking (price + date required), record the £100 fee (which
+  books the job in), start and complete it, record a payment and issue an
+  invoice; a customer POSTing any of those gets a 404. (Portal photo tests
+  use `InMemoryStorage`.)
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -853,8 +984,22 @@ Done end-to-end for every feature so far, most recently:
 - Bookings quote: walked all four outcomes in `QUOTING_PREVIEW` mode (direct
   estimate with breakdown, need-info → follow-up → estimate, refer-to-call,
   and the "book a call" fallback when unconfigured); confirmed the
-  `QuoteRequest` rows and the staff email; checked the signed-out gate and
-  the greyed-out "coming soon" cards.
+  `QuoteRequest` rows and the staff email; checked the signed-out gate.
+- Customer portal: got an estimate, confirmed its `JQ####` reference shows,
+  clicked "Book this job" and saw the booking form pre-filled (name, phone,
+  postcode, suggested title) with the reference carried; edited the address,
+  submitted, and confirmed the `Job` links the quote and the staff email
+  leads with name / address of works / job; then as a staff user walked the
+  whole job from the portal — `/bookings/manage/` dashboard, **Accept &
+  confirm booking** (price + date), **Confirm £100 received**, **Start
+  work** — and checked the customer sees each status change but no manage
+  panel;
+  recorded a booking-fee payment and watched the job move to *Booked*; added
+  a part payment and checked the balance maths; issued a booking-fee receipt
+  and a final invoice and downloaded both PDFs; uploaded work photos in the
+  admin and confirmed they show in the portal; confirmed another account
+  gets a 404 on the job and its invoice, and that a superuser sees the
+  "viewing as staff" banner.
 - Reviews: post a review, see the "awaiting approval" message, confirm it is
   not visible, approve it in the admin, confirm it appears on `/reviews/` and
   the home strip; edit an own review and confirm it drops back to pending;
@@ -959,8 +1104,13 @@ shared code.
       Calendar event + reminders + staff email)
 - [ ] Bookings next: a proper availability calendar (real slots, working
       hours, no double-booking)
-- [ ] Bookings next: customer portal — active project view, work photos,
-      costs, and online payment (Stripe) with a cash "mark as paid" option
+- [x] Bookings — customer project portal ("Your projects"): book a job,
+      staff confirms price + start date, job status / work photos / agreed
+      price / payments / outstanding balance, downloadable PDF invoices,
+      staff access to any customer's portal
+- [ ] Bookings next: Stripe — take the £100 booking fee and balance
+      payments online through the portal (records already model card / cash
+      / bank; only the online card step is left to wire up)
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a

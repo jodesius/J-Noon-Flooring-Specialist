@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Manage bookings{% endblock %}
+
+{% block body_class %}page-bookings{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'bookings/css/bookings.css' %}">
+{% endblock %}
+
+{% block content %}
+<section class="bookings-page">
+    <header class="bookings-page__head">
+        <h1>Manage bookings</h1>
+        <p>Every customer booking.
+            {% if needs_action %}<strong>{{ needs_action }}</strong> waiting on you.{% endif %}
+        </p>
+    </header>
+
+    <div class="manage-filters">
+        <a class="manage-chip{% if not status %} is-on{% endif %}"
+           href="{% url 'bookings:manage' %}">All ({{ total }})</a>
+        {% for value, label, count in groups %}
+            <a class="manage-chip{% if status == value %} is-on{% endif %}"
+               href="?status={{ value }}">{{ label }} ({{ count }})</a>
+        {% endfor %}
+    </div>
+
+    {% if not jobs %}
+        <div class="bookings-card"><p>No bookings{% if status %} with this status{% endif %} yet.</p></div>
+    {% else %}
+        <div class="job-list">
+            {% for job in jobs %}
+                <a class="bookings-card job-card" href="{% url 'bookings:project_detail' slug=job.slug %}">
+                    <span class="job-card__ref">{{ job.reference }}</span>
+                    <span class="job-card__title">{{ job.title }}</span>
+                    <span class="job-status job-status--{{ job.status }}">{{ job.get_status_display }}</span>
+                    <span class="job-card__meta">
+                        {{ job.contact_name|default:job.user.get_username }}
+                        {% if job.agreed_price %} &middot; &pound;{{ job.agreed_price|floatformat:0 }}{% endif %}
+                        {% if job.balance_due and job.balance_due > 0 %} &middot; &pound;{{ job.balance_due|floatformat:0 }} outstanding{% endif %}
+                        {% if job.start_date %} &middot; starts {{ job.start_date|date:"j M" }}{% endif %}
+                    </span>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <p class="bookings-page__back">
+        <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
+    </p>
+</section>
+{% endblock %}

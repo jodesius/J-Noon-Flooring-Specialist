@@ -1,0 +1,1 @@
+Booking request: {{ job.title }} - {{ job.contact_name|default:job.user.get_username }}

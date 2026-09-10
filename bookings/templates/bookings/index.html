@@ -48,11 +48,35 @@
             {% endif %}
         </div>
 
-        <div class="bookings-card bookings-card--soon">
-            <h2>Your projects</h2>
-            <p>Once a job is booked you'll be able to follow progress, see photos and costs, and pay online.</p>
-            <span class="bk-btn bk-btn--disabled">Coming soon</span>
+        <div class="bookings-card">
+            <h2>Book a job</h2>
+            <p>Happy with your quote? Ask to book it in. I'll confirm the price and a start date,
+                 then you secure it with a booking fee that comes off the final bill. booking fee is 20% of the
+                 jobs total ammount.</p>
+            {% if user.is_authenticated %}
+                <a class="bk-btn bk-btn--primary" href="{% url 'bookings:book' %}">Book a job</a>
+            {% else %}
+                <span class="bk-btn bk-btn--disabled">Sign in to book</span>
+            {% endif %}
         </div>
+
+        <div class="bookings-card">
+            <h2>Your projects</h2>
+            <p>Follow each booked job: status, photos of the work, the agreed price, what's been paid and what's left, and your invoices.</p>
+            {% if user.is_authenticated %}
+                <a class="bk-btn bk-btn--primary" href="{% url 'bookings:projects' %}">Open my projects</a>
+            {% else %}
+                <span class="bk-btn bk-btn--disabled">Sign in to view</span>
+            {% endif %}
+        </div>
+
+        {% if user.is_site_admin %}
+        <div class="bookings-card bookings-card--staff">
+            <h2>Manage bookings</h2>
+            <p>Staff view: every customer booking, accept new requests, record the booking fee and payments, move jobs through to complete.</p>
+            <a class="bk-btn bk-btn--primary" href="{% url 'bookings:manage' %}">Manage bookings</a>
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}
