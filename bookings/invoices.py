@@ -22,7 +22,8 @@ LOGO_URL = (
     "ChatGPT_Image_Sep_8_2026_08_34_05_PM-_ycy2tz.webp"
 )
 
-# Fetched once per process; a failure is not cached so it retries next time.
+# ---- company logo (fetched once per process, cached; a failure is not
+# cached so it retries next time) ------------------------------------------
 _LOGO_CACHE = {}
 
 
@@ -91,6 +92,8 @@ def _fmt_date(iso):
     except (TypeError, ValueError):
         return iso or ""
 
+
+# ---- the PDF itself -------------------------------------------------------
 
 def render_invoice_pdf(invoice):
     from reportlab.lib import colors
@@ -226,6 +229,7 @@ def render_invoice_pdf(invoice):
     story += [table, Spacer(1, 6 * mm)]
     table.setStyle(TableStyle(style))
 
+    # ---- closing note, worded to match what kind of document this is ----
     if invoice.kind == invoice.Kind.DEPOSIT:
         totals_note = ("Thank you - your booking fee is paid and your booking is "
                        "secured. It's non-refundable and comes off your final invoice.")

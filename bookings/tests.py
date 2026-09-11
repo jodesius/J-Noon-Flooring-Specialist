@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from .calendar_sync import CalendarUnavailable
 from .models import (
-    CallRequest, CardPayment, FlooringRate, Invoice, InvoiceLineItem, Job,
+    CallRequest, CardPayment, Invoice, InvoiceLineItem, Job,
     JobPhoto, Payment, QuoteRequest, QuoteSettings,
 )
 from .quoting import (
@@ -970,6 +970,15 @@ class StripePaymentTests(TestCase):
         self.assertContains(resp, "pk_test_x")
         self.assertContains(resp, "pi_test_1_secret_abc")
         self.assertContains(resp, "authorise")
+
+    def test_checkout_page_has_the_please_wait_overlay(self):
+        cp = self._card_payment()
+        resp = self.client.get(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+        self.assertContains(resp, 'id="bk-loading"')
+        self.assertContains(resp, "checkout.js")
+        self.assertContains(resp, "Your payment is being processed")
 
     def test_checkout_post_records_authorisation(self):
         cp = self._card_payment()

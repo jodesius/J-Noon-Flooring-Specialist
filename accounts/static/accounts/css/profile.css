@@ -16,6 +16,7 @@
     margin: 0 0 1rem;
 }
 
+/* ---------- Account info: email + verified/unverified badge ---------- */
 .profile__account {
     display: flex;
     flex-wrap: wrap;
@@ -66,6 +67,7 @@
     color: #8a4a1e;
 }
 
+/* ---------- Edit form: avatar upload + the editable fields ---------- */
 .profile__avatar-row {
     display: flex;
     gap: 1rem;

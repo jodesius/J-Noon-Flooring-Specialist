@@ -13,7 +13,6 @@ Set-up (one-off):
      key file (JSON text, or a path to it) in GOOGLE_SERVICE_ACCOUNT_JSON.
 """
 
-import datetime as dt
 import json
 import logging
 import pathlib

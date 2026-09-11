@@ -90,6 +90,8 @@
     </p>
 </section>
 
+{% include "bookings/_loading_overlay.html" with loading_title="Your payment is being processed" loading_note="This usually takes a few seconds - your bank may ask you to confirm it." %}
+
 {{ checkout_data|json_script:"checkout-data" }}
 {% endblock %}
 

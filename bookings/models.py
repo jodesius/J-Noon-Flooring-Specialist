@@ -10,6 +10,14 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 
+# ==========================================================================
+# AI quote engine
+#
+# FlooringRate is just the picklist shown on the quote form. QuoteSettings
+# is the admin-edited rate card + rules the AI reads. QuoteRequest is one
+# customer's answers plus whatever the AI (or the coverage check) decided.
+# ==========================================================================
+
 class FlooringRate(models.Model):
     """A flooring system the customer can pick on the quote form. Prices live
     in the rate card (`QuoteSettings.rate_card`), not here - this is just the
@@ -216,6 +224,10 @@ class QuoteRequest(models.Model):
         return title.strip()[:140]
 
 
+# ==========================================================================
+# Book a call-back
+# ==========================================================================
+
 class CallRequest(models.Model):
     """A customer asking for a call-back at a chosen time. Creates an event on
     the fitter's Google Calendar when that's configured.
@@ -421,6 +433,8 @@ class Job(models.Model):
             self.save(update_fields=["status", "updated_at"])
 
 
+# ---- work photos ---------------------------------------------------------
+
 class JobPhoto(models.Model):
     """A photo of the work, uploaded by Joseph through the admin."""
 
@@ -443,6 +457,12 @@ class JobPhoto(models.Model):
     def full_url(self):
         return _cloudinary_variant(self.image.url, "f_auto,q_auto,c_limit,w_1800")
 
+
+# ---- money: payments, invoices, itemised invoice lines -------------------
+# Payment is the ledger - the single source of truth for what's been paid,
+# whether entered by hand or written by a successful CardPayment below.
+# Invoice / InvoiceLineItem are what the customer downloads; their totals
+# are snapshotted from the ledger at issue time so a PDF never changes later.
 
 class Payment(models.Model):
     """A payment against a job. Recorded by hand for now."""
@@ -598,6 +618,11 @@ class InvoiceLineItem(models.Model):
         super().delete(*args, **kwargs)
         invoice.sync_total_from_line_items()
 
+
+# ---- Stripe card payments -------------------------------------------------
+# Card data never reaches this model - only Stripe's PaymentIntent id and
+# its status. mark_succeeded() is the one place a card payment turns into
+# real money (a Payment row) and, from there, moves the job along.
 
 class CardPayment(models.Model):
     """One online card payment attempt, tracked through its Stripe lifecycle.

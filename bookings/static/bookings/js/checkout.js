@@ -36,6 +36,7 @@
     var buttonText = document.getElementById("pay-button-text");
     var spinner = document.getElementById("pay-button-spinner");
     var errorBox = document.getElementById("pay-errors");
+    var overlay = document.getElementById("bk-loading");
     var submitting = false;
 
     function showError(msg) {
@@ -44,11 +45,31 @@
         errorBox.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
+    // Warn on an accidental refresh/close while the payment is in flight -
+    // closing now would leave it stuck "processing" with no record client-side
+    // (the webhook / return page still catch it, but better to avoid it).
+    function warnBeforeUnload(event) {
+        event.preventDefault();
+        event.returnValue = "";
+    }
+
+    // One switch for every "payment in progress" affordance: the full-screen
+    // overlay (same one the quote page uses), the button's own spinner, and
+    // the browser's "are you sure you want to leave" prompt.
     function setBusy(busy) {
         submitting = busy;
         button.disabled = busy;
         buttonText.hidden = busy;
         spinner.hidden = !busy;
+        if (overlay) {
+            overlay.classList.toggle("is-active", busy);
+            document.body.style.overflow = busy ? "hidden" : "";
+        }
+        if (busy) {
+            window.addEventListener("beforeunload", warnBeforeUnload);
+        } else {
+            window.removeEventListener("beforeunload", warnBeforeUnload);
+        }
     }
 
     function csrfToken() {
@@ -128,6 +149,15 @@
         // browser is redirected to return_url).
         if (result.error) {
             showError(result.error.message || "Your payment could not be completed.");
+            setBusy(false);
+        }
+    });
+
+    // Coming back via the browser's Back button can restore this page from
+    // cache with the overlay still showing and the button still locked - the
+    // payment attempt is over one way or another by then, so clear it.
+    window.addEventListener("pageshow", function (event) {
+        if (event.persisted && submitting) {
             setBusy(false);
         }
     });

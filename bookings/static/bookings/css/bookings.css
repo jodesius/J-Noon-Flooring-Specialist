@@ -362,6 +362,7 @@
 
 .job-startline { margin-top: 1rem; }
 
+/* costs table, payments table, invoices list (project detail page) */
 .job-money th { font-weight: 500; }
 .job-money__due th, .job-money__due td {
     font-weight: 800;
@@ -390,6 +391,7 @@
 .job-invoices li:first-child { border-top: 0; }
 .job-invoices small { color: #6b6b6b; }
 
+/* work photos grid */
 .job-photos {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -551,6 +553,8 @@
     color: #6b6b6b;
 }
 
+/* respect the OS "reduce motion" setting: slow the spin right down instead
+   of stopping it, so it still reads as "loading" */
 @media (prefers-reduced-motion: reduce) {
     .bk-loading__spinner { animation-duration: 2.6s; }
 }
@@ -603,6 +607,8 @@
 .pay-choose__amount { display: flex; align-items: center; gap: 0.4rem; margin: 0.5rem 0 0.2rem; }
 .pay-choose__amount input { max-width: 10rem; }
 
+/* small phones (< 520px): stretch buttons full-width and stack anything
+   that was side-by-side, so nothing gets cramped */
 @media (max-width: 520px) {
     .bk-btn { align-self: stretch; text-align: center; }
     .bookings-gate__actions .bk-btn { flex: 1; }

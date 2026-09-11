@@ -189,7 +189,8 @@ def build_customer_summary(qr, final_round=False):
 
 
 # --------------------------------------------------------------------------
-# The call
+# Coverage check - runs before any AI call, so an out-of-area postcode never
+# costs an API request.
 # --------------------------------------------------------------------------
 
 def _out_of_area_response(qr):
@@ -214,6 +215,10 @@ def _out_of_area_response(qr):
         ),
     }
 
+
+# --------------------------------------------------------------------------
+# The call - Claude, given the rate card + the customer's answers
+# --------------------------------------------------------------------------
 
 def generate_quote(qr, final_round=False):
     if not rate_card_ready():

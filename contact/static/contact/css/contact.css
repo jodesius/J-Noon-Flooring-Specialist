@@ -218,10 +218,12 @@
 }
 
 /* ---------- Responsive ---------- */
+/* tablet: the photo + details side-by-side columns become one stack */
 @media (max-width: 820px) {
     .contact-top { grid-template-columns: 1fr; }
     .contact-details__photo { max-height: 420px; }
 }
+/* small phones: full-width submit button */
 @media (max-width: 520px) {
     .contact-form__submit { align-self: stretch; text-align: center; }
 }

@@ -185,7 +185,9 @@ Dependencies are pinned in `requirements.txt`.
   please don't close or refresh the page"* — and blocks re-submitting while
   the AI works. Progressive enhancement (`bookings/js/quote-loading.js`); it
   only appears once the browser sees the form as complete, so validation
-  errors still come straight back.
+  errors still come straight back. The same overlay markup
+  (`_loading_overlay.html`, its title/note overridable per page) is reused
+  on the **Stripe checkout page** for "Pay" — see Card payments below.
 - **Graceful states:** with no `ANTHROPIC_API_KEY`, an empty rate card, or
   the master switch off, the quote page invites the customer to **book a
   call** instead — nothing errors. `QUOTING_PREVIEW=1` (DEBUG only) walks the
@@ -264,7 +266,14 @@ Dependencies are pinned in `requirements.txt`.
   checkbox, and **Stripe Elements** for the billing address and card
   fields. Card details go straight from the browser to Stripe — this server
   only ever handles the PaymentIntent id and status (PCI SAQ A). A
-  `CardPayment` row tracks each attempt.
+  `CardPayment` row tracks each attempt. Hitting **"Pay"** shows the same
+  full-screen **"please wait" overlay** as the AI quote ("Your payment is
+  being processed… please don't close or refresh the page"), disables the
+  button, and warns the browser's own way if they try to navigate away
+  mid-payment — Stripe's PaymentIntent model + the re-use logic in
+  `_start_card_payment` already stop a double-click from ever creating a
+  second charge; this is purely to stop the customer worrying it didn't work
+  and trying again.
 - **On a successful card payment, everything happens automatically**
   (`_finalise_card_payment`, idempotent, run by the Stripe **webhook** with
   the return page as a backup — whichever gets there first):
@@ -803,6 +812,8 @@ development. See `.env.example` for the template.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DJANGO_SECRET_KEY` | Yes | Django cryptographic signing key. The app will not start without it. |
+| `DJANGO_DEBUG` | No | `False` before going live. Unset (default) behaves exactly like today — `DEBUG=True`. |
+| `DJANGO_ALLOWED_HOSTS` | No | Comma-separated real domain(s) before going live, e.g. `jnoonflooring.co.uk,www.jnoonflooring.co.uk`. Unset = empty (local dev only). |
 | `DATABASE_URL` | No | PostgreSQL connection string (Neon). If unset, a local SQLite file is used. |
 | `EMAIL_HOST` | No | SMTP server. Default `smtp.gmail.com`. |
 | `EMAIL_PORT` | No | SMTP port. Default `587` (STARTTLS). |
@@ -1036,7 +1047,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **144**, across `core`,
+tests where they add lasting value (currently **145**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -1157,10 +1168,11 @@ Done end-to-end for every feature so far, most recently:
   gets a 404 on the job and its invoice, and that a superuser sees the
   "viewing as staff" banner. Card payments: checked the branded checkout
   page renders (summary, our name/email/job-address fields, "authorise"
-  checkbox, Stripe Elements mount points), the "Pay now" / "Make a payment"
-  buttons appear only with keys set, and the pay-choice screen's
-  full-vs-part maths. End-to-end card runs against Stripe **test mode** are
-  the remaining live check — see "Stripe card payments" above.
+  checkbox, Stripe Elements mount points, the "please wait" overlay), the
+  "Pay now" / "Make a payment" buttons appear only with keys set, and the
+  pay-choice screen's full-vs-part maths. **Confirmed end-to-end against
+  real Stripe test mode**: a booking-fee payment and two balance payments,
+  each auto-recording, auto-invoicing and emailing correctly.
 - Reviews: post a review, see the "awaiting approval" message, confirm it is
   not visible, approve it in the admin, confirm it appears on `/reviews/` and
   the home strip; edit an own review and confirm it drops back to pending;

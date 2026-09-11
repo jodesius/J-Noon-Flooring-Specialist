@@ -1,8 +1,14 @@
+import datetime as _dt
+
 from django import forms
 from django.utils import timezone
 
 from .models import CallRequest, FlooringRate, Job, Payment, QuoteRequest
 
+
+# ==========================================================================
+# Get a free quote
+# ==========================================================================
 
 class QuoteStartForm(forms.ModelForm):
     website = forms.CharField(  # honeypot
@@ -102,8 +108,9 @@ class QuoteStartForm(forms.ModelForm):
         return cleaned
 
 
-import datetime as _dt
-
+# ==========================================================================
+# Book a call-back
+# ==========================================================================
 
 def _time_choices():
     out = []
@@ -168,6 +175,10 @@ class CallRequestForm(forms.ModelForm):
             raise forms.ValidationError("Please pick a day within the next three weeks.")
         return date
 
+
+# ==========================================================================
+# Book a job / "Your projects" portal
+# ==========================================================================
 
 class BookJobForm(forms.ModelForm):
     """Customer asks to book a job. Joseph then sets the price and confirms.
@@ -276,6 +287,7 @@ class BookJobForm(forms.ModelForm):
         return cleaned
 
 
+# Staff-only forms used by the manage panel (accept a booking, log a payment)
 class ConfirmBookingForm(forms.ModelForm):
     """Staff-only: on the customer's portal page, set the agreed terms and
     accept a booking request."""
@@ -314,6 +326,7 @@ class RecordPaymentForm(forms.ModelForm):
         return amount
 
 
+# Back to the AI quote flow: the follow-up questions page.
 class FollowUpForm(forms.Form):
     """Built at runtime from the AI's follow-up questions."""
 

@@ -1,14 +1,19 @@
 {% comment %}
-Full-screen "please wait" overlay, shown by quote-loading.js when the quote
-form is submitted (the AI call can take a while). Hidden until then.
+Full-screen "please wait" overlay - the same one for any slow, one-shot
+action (AI quote, card payment). Shown by quote-loading.js / checkout.js
+once the customer submits; hidden until then.
+
+Optional context vars (both plain text, safe to leave as defaults):
+  loading_title - headline, e.g. "Your quote is being calculated"
+  loading_note  - the line under it, e.g. what it's waiting on
 {% endcomment %}
 <div class="bk-loading" id="bk-loading" role="alertdialog" aria-modal="true"
      aria-labelledby="bk-loading-title" aria-describedby="bk-loading-note">
     <div class="bk-loading__box">
         <div class="bk-loading__spinner" aria-hidden="true"></div>
-        <p class="bk-loading__title" id="bk-loading-title">Your quote is being calculated</p>
+        <p class="bk-loading__title" id="bk-loading-title">{{ loading_title|default:"Your quote is being calculated" }}</p>
         <p class="bk-loading__note" id="bk-loading-note">
-            This can take up to a minute while I work through the details.
+            {{ loading_note|default:"This can take up to a minute while I work through the details." }}
             <strong>Please don't close or refresh the page.</strong>
         </p>
     </div>

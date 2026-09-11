@@ -240,6 +240,7 @@
     color: #f0e4d6;
 }
 
+/* tablet and below: drop "how we work" from 3 columns to a single stack */
 @media (max-width: 880px) {
     .hww-grid {
         grid-template-columns: 1fr;
@@ -319,6 +320,7 @@
     font-weight: 700;
 }
 
+/* small phones: stack the hero + reviews call-to-action buttons */
 @media (max-width: 520px) {
     .hero__actions,
     .home-reviews__foot { flex-direction: column; }

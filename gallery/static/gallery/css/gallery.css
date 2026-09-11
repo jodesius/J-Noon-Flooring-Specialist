@@ -83,6 +83,8 @@
     column-count: 1;
     column-gap: var(--gal-gap);
 }
+/* 1 column by default (small phones); widen the masonry as the viewport
+   grows - larger mobiles, tablets, desktop, then 4K+ */
 @media (min-width: 425px)  { .gallery-grid { column-count: 2; } }
 @media (min-width: 768px)  { .gallery-grid { column-count: 3; } }
 @media (min-width: 1024px) { .gallery-grid { column-count: 4; } }
@@ -217,6 +219,8 @@
     line-height: 1;
 }
 
+/* phones: move the lightbox prev/next arrows onto the image instead of
+   either side of it, or they'd run off-screen */
 @media (max-width: 620px) {
     .lightbox__nav {
         position: absolute;
@@ -226,6 +230,7 @@
     .lightbox__nav--next { right: clamp(0.5rem, 4vw, 1.5rem); }
 }
 
+/* respect the OS "reduce motion" setting */
 @media (prefers-reduced-motion: reduce) {
     .gallery-card,
     .gallery-card__label { transition: none; }

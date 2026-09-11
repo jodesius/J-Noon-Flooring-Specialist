@@ -32,6 +32,10 @@ from .quoting import QuotingUnavailable, generate_quote, quoting_available
 logger = logging.getLogger(__name__)
 
 
+# ==========================================================================
+# Landing page
+# ==========================================================================
+
 def index(request):
     return render(
         request,
@@ -39,6 +43,10 @@ def index(request):
         {"quoting_available": quoting_available()},
     )
 
+
+# ==========================================================================
+# Shared helpers - used by several views below
+# ==========================================================================
 
 def _profile_defaults(user):
     profile = getattr(user, "profile", None)
@@ -101,6 +109,10 @@ def _run_quoting(request, qr, final_round=False):
     qr.save()
 
 
+# ==========================================================================
+# Get a free quote (AI quote engine)
+# ==========================================================================
+
 @login_required
 def quote(request):
     if not quoting_available():
@@ -128,6 +140,10 @@ def quote(request):
 
     return render(request, "bookings/quote.html", {"form": form})
 
+
+# ==========================================================================
+# Book a call-back
+# ==========================================================================
 
 @login_required
 def call(request):
@@ -169,6 +185,10 @@ def call(request):
 
     return render(request, "bookings/call.html", {"form": form})
 
+
+# ==========================================================================
+# Book a job
+# ==========================================================================
 
 def _booking_initial(request):
     """Prefill the booking form from ?quote=<reference> when it points at one
@@ -235,6 +255,10 @@ def book(request):
 
     return render(request, "bookings/book.html", {"form": form})
 
+
+# ==========================================================================
+# "Your projects" - the customer portal + the staff manage panel
+# ==========================================================================
 
 def _get_owned_job(request, slug):
     """The job at `slug` - for its owner, or for staff organising it."""
@@ -631,6 +655,9 @@ def checkout_return(request, slug):
                   {"cp": cp, "job": cp.job})
 
 
+# Stripe webhook - the source of truth for "did the payment go through".
+# Signature-checked, CSRF-exempt (Stripe can't send our CSRF token), and
+# idempotent via _finalise_card_payment, since Stripe retries deliveries.
 @csrf_exempt
 @require_POST
 def stripe_webhook(request):
@@ -662,6 +689,8 @@ def stripe_webhook(request):
     return HttpResponse(status=200)
 
 
+# Back to the AI quote flow: the follow-up-answers page and the final
+# result page (rough estimate / call me / out of area).
 @login_required
 def quote_detail(request, slug):
     qr = get_object_or_404(QuoteRequest, slug=slug, user=request.user)

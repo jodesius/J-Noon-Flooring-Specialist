@@ -35,9 +35,15 @@ load_dotenv(BASE_DIR / ".env", override=True)
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Both default to today's local-dev behaviour (DEBUG on, only localhost
+# allowed) when unset, so this changes nothing until you set them. Before
+# going live, set DJANGO_DEBUG=False and DJANGO_ALLOWED_HOSTS to your real
+# domain(s) in the production environment.
+DEBUG = os.environ.get("DJANGO_DEBUG", "True").strip().lower() in {"1", "true", "yes"}
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()
+]
 
 
 # Application definition

@@ -57,6 +57,8 @@ def postcode_point(postcode):
 
 
 def _haversine_miles(a, b):
+    """Straight-line ("as the crow flies") distance between two lat/lng
+    points, in miles."""
     lat1, lon1, lat2, lon2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     dlat, dlon = lat2 - lat1, lon2 - lon1
     h = (

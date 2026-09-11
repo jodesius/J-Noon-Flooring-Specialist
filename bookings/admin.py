@@ -20,6 +20,10 @@ def _delete_stored(name):
         pass
 
 
+# ==========================================================================
+# Bookings landing: call-backs + the AI quote engine
+# ==========================================================================
+
 @admin.register(CallRequest)
 class CallRequestAdmin(admin.ModelAdmin):
     list_display = (
@@ -137,9 +141,9 @@ class QuoteRequestAdmin(admin.ModelAdmin):
         )
 
 
-# --------------------------------------------------------------------------
+# ==========================================================================
 # "Your projects" - the customer portal
-# --------------------------------------------------------------------------
+# ==========================================================================
 
 class JobPhotoInline(admin.TabularInline):
     model = JobPhoto
@@ -315,6 +319,8 @@ class InvoiceAdmin(admin.ModelAdmin):
         return False
 
 
+# Stripe card payments - read-only, so this is purely a record of what
+# Stripe reported; nothing here is ever hand-entered.
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
     list_display = ("job", "purpose", "amount", "status", "payer_name",
