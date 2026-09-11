@@ -29,6 +29,9 @@
                         {% if current != "bookings:index" %}
                             <a class="menu__link" href="{% url 'bookings:index' %}">Bookings</a>
                         {% endif %}
+                        {% if has_active_job and current != "bookings:projects" %}
+                            <a class="menu__link" href="{% url 'bookings:projects' %}">Your projects</a>
+                        {% endif %}
                         {% if current != "contact:index" %}
                             <a class="menu__link" href="{% url 'contact:index' %}">Contact us</a>
                         {% endif %}
