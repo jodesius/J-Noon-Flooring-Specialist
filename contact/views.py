@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.core.mail import EmailMessage
 from django.shortcuts import redirect, render
@@ -48,5 +49,9 @@ def index(request):
     return render(
         request,
         "contact/index.html",
-        {"contact": contact, "form": form},
+        {
+            "contact": contact,
+            "form": form,
+            "geoapify_key": settings.GEOAPIFY_API_KEY,
+        },
     )

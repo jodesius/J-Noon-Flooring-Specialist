@@ -21,6 +21,9 @@
             <tbody>
                 <tr><th>Agreed price</th><td>&pound;{{ job.agreed_price|floatformat:2 }}</td></tr>
                 <tr><th>Paid so far</th><td>&pound;{{ job.total_paid|floatformat:2 }}</td></tr>
+                {% if job.total_refunded %}
+                    <tr><th>Refunded</th><td>&minus;&pound;{{ job.total_refunded|floatformat:2 }}</td></tr>
+                {% endif %}
                 <tr class="job-money__due">
                     <th>Outstanding</th><td>&pound;{{ balance|floatformat:2 }}</td>
                 </tr>
@@ -43,11 +46,12 @@
                         <input type="radio" name="choice" value="part">
                         Pay part of it
                     </label>
-                    <div class="pay-choose__amount">
+                    <div class="pay-choose__amount" id="pay-choose-amount" hidden>
                         &pound;
                         <input type="number" name="amount" step="0.01" min="1"
                                max="{{ balance|floatformat:2 }}"
-                               placeholder="0.00" inputmode="decimal">
+                               placeholder="0.00" inputmode="decimal"
+                               id="pay-choose-amount-input">
                     </div>
                     <span class="bk-field__help">
                         Any amount up to &pound;{{ balance|floatformat:2 }}. You can come
@@ -64,4 +68,8 @@
         <a href="{% url 'bookings:project_detail' slug=job.slug %}">&larr; Back to the job</a>
     </p>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+    <script src="{% static 'bookings/js/pay_choose.js' %}" defer></script>
 {% endblock %}

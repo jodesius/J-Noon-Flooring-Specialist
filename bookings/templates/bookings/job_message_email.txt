@@ -1,0 +1,9 @@
+{{ sender_name }} left a message on their job.
+
+JOB: {{ job.reference }} - {{ job.title }}
+{% if message.body %}
+"{{ message.body }}"
+{% endif %}{% if message.photo %}
+A photo was attached - view it in the job's portal page.
+{% endif %}
+{{ url }}

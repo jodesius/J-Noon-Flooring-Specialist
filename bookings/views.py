@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.mail import EmailMessage
+from django.db.models import Count, Q
 from django.http import (
     Http404, HttpResponse, HttpResponseBadRequest, JsonResponse,
 )
@@ -19,10 +20,14 @@ from django.views.decorators.http import require_POST
 from .calendar_sync import CalendarUnavailable, create_call_event
 from .forms import (
     BookJobForm, CallRequestForm, ConfirmBookingForm, FollowUpForm,
-    QuoteStartForm, RecordPaymentForm,
+    JobMessageForm, JobPhotoForm, QuoteStartForm, RecordPaymentForm,
+    RefundRequestForm,
 )
 from .invoices import render_invoice_pdf
-from .models import CallRequest, CardPayment, Invoice, Job, Payment, QuoteRequest
+from .models import (
+    CallRequest, CardPayment, Invoice, Job, JobMessage, Payment, QuoteRequest,
+    RefundRequest,
+)
 from .payments import (
     PaymentsUnavailable, create_payment_intent, retrieve_intent,
     stripe_enabled, verify_webhook,
@@ -68,6 +73,12 @@ def _email_staff(request, subject_template, body_template, ctx):
     EmailMessage(subject=subject, body=body, to=[settings.DEFAULT_FROM_EMAIL]).send(
         fail_silently=True
     )
+
+
+def _email_customer(job, subject_template, body_template, ctx):
+    subject = render_to_string(subject_template, ctx).strip()
+    body = render_to_string(body_template, ctx)
+    EmailMessage(subject=subject, body=body, to=[job.user.email]).send(fail_silently=True)
 
 
 def _notify_staff(request, qr):
@@ -286,7 +297,16 @@ def manage(request):
         raise Http404
 
     status = request.GET.get("status", "")
-    jobs = Job.objects.select_related("user")
+    jobs = Job.objects.select_related("user").annotate(
+        unread_message_count=Count(
+            "messages",
+            filter=Q(messages__is_staff_message=False, messages__read_by_staff=False),
+        ),
+        open_refund_count=Count(
+            "refund_requests",
+            filter=Q(refund_requests__status=RefundRequest.Status.REQUESTED),
+        ),
+    )
     if status:
         jobs = jobs.filter(status=status)
 
@@ -304,6 +324,12 @@ def manage(request):
             "total": Job.objects.count(),
             "needs_action": Job.objects.filter(
                 status__in=[Job.Status.REQUESTED, Job.Status.AWAITING_DEPOSIT]
+            ).count(),
+            "unread_messages": JobMessage.objects.filter(
+                is_staff_message=False, read_by_staff=False
+            ).count(),
+            "open_refund_requests": RefundRequest.objects.filter(
+                status=RefundRequest.Status.REQUESTED
             ).count(),
         },
     )
@@ -344,14 +370,23 @@ def _handle_job_action(request, job):
         return
 
     if action == "record_payment":
-        form = RecordPaymentForm(request.POST)
+        form = RecordPaymentForm(request.POST, job=job)
         if form.is_valid():
             payment = form.save(commit=False)
             payment.job = job
             payment.save()
-            messages.success(request, f"£{payment.amount:.2f} payment recorded.")
+            if payment.kind == Payment.Kind.REFUND:
+                job.refresh_from_db()
+                messages.success(
+                    request,
+                    f"£{payment.amount:.2f} refund recorded - outstanding "
+                    f"balance is now £{job.balance_due:.2f}.",
+                )
+            else:
+                messages.success(request, f"£{payment.amount:.2f} payment recorded.")
         else:
-            messages.error(request, "Enter a valid payment amount.")
+            errors = " ".join(e for errs in form.errors.values() for e in errs)
+            messages.error(request, f"Couldn't record that - {errors}")
         return
 
     if action == "start":
@@ -392,6 +427,25 @@ def _handle_job_action(request, job):
         messages.success(request, "Booking cancelled.")
         return
 
+    if action == "add_photo":
+        form = JobPhotoForm(request.POST, request.FILES)
+        if form.is_valid():
+            photo = form.save(commit=False)
+            photo.job = job
+            photo.save()
+            messages.success(request, "Photo added.")
+        else:
+            errors = " ".join(e for errs in form.errors.values() for e in errs)
+            messages.error(request, f"Couldn't add that photo - {errors}")
+        return
+
+    if action == "resolve_refund":
+        refund_request = job.open_refund_request
+        if refund_request:
+            refund_request.resolve()
+            messages.success(request, "Refund request marked resolved.")
+        return
+
     messages.error(request, "Unknown action.")
 
 
@@ -406,6 +460,16 @@ def project_detail(request, slug):
         _handle_job_action(request, job)
         return redirect("bookings:project_detail", slug=job.slug)
 
+    if can_manage:
+        # Opening the job counts as reading any messages waiting on staff.
+        job.messages.filter(is_staff_message=False, read_by_staff=False).update(
+            read_by_staff=True
+        )
+
+    # The chat box shows once the job's live (chat_open), and stays visible
+    # after complete/cancelled only if there's actually history to read.
+    chat_visible = job.chat_open or (job.chat_unlocked and job.messages.exists())
+
     return render(
         request,
         "bookings/project_detail.html",
@@ -417,9 +481,14 @@ def project_detail(request, slug):
             "can_manage": can_manage,
             "viewing_as_staff": can_manage and job.user_id != request.user.id,
             "confirm_form": ConfirmBookingForm(instance=job) if can_manage else None,
-            "payment_form": RecordPaymentForm() if can_manage else None,
+            "payment_form": RecordPaymentForm(job=job) if can_manage else None,
+            "photo_form": JobPhotoForm() if can_manage else None,
             "admin_url": f"/admin/bookings/job/{job.pk}/change/" if can_manage else None,
             "stripe_ready": stripe_enabled(),
+            "chat_visible": chat_visible,
+            "chat_messages": job.messages.select_related("sender") if chat_visible else None,
+            "message_form": JobMessageForm() if job.chat_open else None,
+            "refund_form": RefundRequestForm() if not can_manage else None,
         },
     )
 
@@ -432,6 +501,114 @@ def invoice_pdf(request, slug, number):
     resp = HttpResponse(pdf, content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="{invoice.number}.pdf"'
     return resp
+
+
+def _notify_refund_request(request, refund_request):
+    try:
+        _email_staff(
+            request, "bookings/refund_request_email_subject.txt",
+            "bookings/refund_request_email.txt",
+            {
+                "refund_request": refund_request, "job": refund_request.job,
+                "url": request.build_absolute_uri(
+                    reverse(
+                        "bookings:project_detail",
+                        kwargs={"slug": refund_request.job.slug},
+                    )
+                ),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Refund request notification email failed (RefundRequest %s)",
+            refund_request.pk,
+        )
+
+
+@login_required
+@require_POST
+def request_refund(request, slug):
+    """Customer-only: ask for a refund and say why. The actual refund stays
+    a manual step - discussed on the job's chat thread, then recorded as a
+    payment (kind=refund) once it's sorted."""
+    job = _owner_job(request, slug)
+    if job.total_paid <= 0:
+        messages.info(request, "There's nothing paid on this job to refund.")
+        return redirect("bookings:project_detail", slug=job.slug)
+    if job.open_refund_request:
+        messages.info(
+            request, "You already have an open refund request - I'll be in touch."
+        )
+        return redirect("bookings:project_detail", slug=job.slug)
+
+    form = RefundRequestForm(request.POST)
+    if form.is_valid():
+        refund_request = form.save(commit=False)
+        refund_request.job = job
+        refund_request.requested_by = request.user
+        refund_request.save()
+        _notify_refund_request(request, refund_request)
+        messages.success(request, "Refund request sent - I'll be in touch.")
+    else:
+        messages.error(request, "Please give a reason for the refund request.")
+    return redirect("bookings:project_detail", slug=job.slug)
+
+
+def _notify_new_message(request, message):
+    """Email whichever side didn't send it - staff get the usual owner
+    address, the customer gets emailed directly since it's their job."""
+    job = message.job
+    sender_name = (
+        request.user.get_username() if message.is_staff_message
+        else (job.contact_name or job.user.get_username())
+    )
+    ctx = {
+        "job": job, "message": message, "sender_name": sender_name,
+        "url": request.build_absolute_uri(
+            reverse("bookings:project_detail", kwargs={"slug": job.slug})
+        ),
+    }
+    try:
+        if message.is_staff_message:
+            if job.user.email:
+                _email_customer(
+                    job, "bookings/job_message_customer_email_subject.txt",
+                    "bookings/job_message_customer_email.txt", ctx,
+                )
+        else:
+            _email_staff(
+                request, "bookings/job_message_email_subject.txt",
+                "bookings/job_message_email.txt", ctx,
+            )
+    except Exception:
+        logger.exception("Job message notification email failed (JobMessage %s)", message.pk)
+
+
+@login_required
+@require_POST
+def post_job_message(request, slug):
+    """Send a chat message on a job - customer or staff, either can post
+    while the job is live (chat_open); read-only once complete/cancelled."""
+    job = _get_owned_job(request, slug)
+    if not job.chat_open:
+        raise Http404
+
+    form = JobMessageForm(request.POST, request.FILES)
+    if form.is_valid():
+        message = form.save(commit=False)
+        message.job = job
+        message.sender = request.user
+        message.is_staff_message = request.user.is_site_admin
+        message.save()
+        _notify_new_message(request, message)
+    else:
+        messages.error(
+            request,
+            "Couldn't send that - "
+            + " ".join(e for errs in form.errors.values() for e in errs),
+        )
+
+    return redirect("bookings:project_detail", slug=job.slug)
 
 
 # ==========================================================================
@@ -546,6 +723,17 @@ def pay_balance(request, slug):
                   {"job": job, "balance": balance})
 
 
+def _cp_is_stale(cp):
+    """True if the outstanding balance has shrunk below this pending
+    CardPayment's amount since it was created - e.g. a refund landed while
+    the customer sat on the checkout page. Closes the "still charge the old,
+    now-too-high amount" overpayment window before Stripe is even touched."""
+    if cp.purpose not in (CardPayment.Purpose.BALANCE, CardPayment.Purpose.PART):
+        return False
+    balance = cp.job.balance_due
+    return balance is not None and cp.amount > balance
+
+
 @login_required
 def checkout(request, slug):
     cp = get_object_or_404(
@@ -554,6 +742,24 @@ def checkout(request, slug):
     )
     if cp.is_settled:
         return redirect("bookings:checkout_return", slug=cp.slug)
+
+    if cp.status == CardPayment.Status.PENDING and _cp_is_stale(cp):
+        cp.mark_failed("Outstanding balance changed before payment was completed.")
+        if request.method == "POST":
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "The outstanding balance has changed - please "
+                    "choose an amount again.",
+                },
+                status=409,
+            )
+        messages.error(
+            request,
+            "The outstanding balance has changed since you started this "
+            "payment - please choose an amount again.",
+        )
+        return redirect("bookings:pay_balance", slug=cp.job.slug)
 
     if request.method == "POST":
         # The browser records the customer's authorisation + payer details
@@ -621,12 +827,24 @@ def _finalise_card_payment(request, cp):
         cp.invoice = invoice
         cp.save(update_fields=["invoice", "updated_at"])
 
+    # Should be impossible now that checkout() refuses a stale amount before
+    # Stripe is even touched (_cp_is_stale) - but the money's already moved
+    # by this point, so flag it loudly rather than silently under-record it.
+    balance = cp.job.balance_due
+    overpaid_by = -balance if balance is not None and balance < 0 else None
+    if overpaid_by:
+        logger.warning(
+            "CardPayment %s took job %s balance negative by £%s",
+            cp.pk, cp.job.reference, overpaid_by,
+        )
+
     try:
         _email_staff(
             request,
             "bookings/payment_email_subject.txt", "bookings/payment_email.txt",
             {
                 "cp": cp, "job": cp.job, "invoice": invoice,
+                "overpaid_by": overpaid_by,
                 "url": request.build_absolute_uri(
                     f"/admin/bookings/job/{cp.job.pk}/change/"
                 ),

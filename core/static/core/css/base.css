@@ -184,6 +184,26 @@ body {
     white-space: nowrap;
 }
 
+/* Unread-messages pill for admins, next to their name - links to the
+   manage-bookings dashboard so it's a one-click "go check" from any page. */
+.nav-alert {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.65rem;
+    margin-right: 0.4rem;
+    border-radius: 999px;
+    background: #8a1f1f;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.nav-alert:hover,
+.nav-alert:focus-visible {
+    background: #6f1818;
+}
+
 /* The badge links to the profile page (signed in) or the login page (out). */
 .user-badge--link {
     text-decoration: none;

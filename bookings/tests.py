@@ -4,6 +4,7 @@ from decimal import Decimal
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -14,7 +15,7 @@ from django.utils import timezone
 from .calendar_sync import CalendarUnavailable
 from .models import (
     CallRequest, CardPayment, Invoice, InvoiceLineItem, Job,
-    JobPhoto, Payment, QuoteRequest, QuoteSettings,
+    JobMessage, JobPhoto, Payment, QuoteRequest, QuoteSettings, RefundRequest,
 )
 from .quoting import (
     QuotingUnavailable, _preview_response, _sanitise, quoting_available,
@@ -744,6 +745,31 @@ class JobMoneyTests(TestCase):
         self.assertEqual(self.job.total_paid, Decimal("100.00"))
         self.assertEqual(self.job.balance_due, Decimal("1100.00"))
 
+    def test_refund_is_store_credit_off_the_balance_only(self):
+        """A refund is treated like store credit: it comes straight off
+        what's still owed, without touching the paid-so-far figure or the
+        agreed price - so "paid so far" stays as the real cash history."""
+        Payment.objects.create(
+            job=self.job, amount=Decimal("300.00"), kind=Payment.Kind.PART
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("50.00"), kind=Payment.Kind.REFUND
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.agreed_price, Decimal("1200.00"))  # unchanged
+        self.assertEqual(self.job.total_paid, Decimal("300.00"))  # unchanged
+        self.assertEqual(self.job.total_refunded, Decimal("50.00"))
+        self.assertEqual(self.job.balance_due, Decimal("850.00"))  # 1200-300-50
+
+    def test_open_refund_request_property(self):
+        self.assertIsNone(self.job.open_refund_request)
+        rr = RefundRequest.objects.create(
+            job=self.job, requested_by=self.job.user, reason="x"
+        )
+        self.assertEqual(self.job.open_refund_request, rr)
+        rr.resolve()
+        self.assertIsNone(self.job.open_refund_request)
+
     def test_booking_fee_payment_moves_job_to_booked(self):
         Payment.objects.create(
             job=self.job, amount=Decimal("100.00"), kind=Payment.Kind.BOOKING_FEE
@@ -779,6 +805,28 @@ class InvoiceTests(TestCase):
         inv.save()
         inv.ensure_default_line_item()
         return inv
+
+    def test_snapshot_keeps_a_refund_separate_from_total_paid(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND
+        )
+        inv = self._issue()
+        self.assertEqual(inv.total_paid, Decimal("100.00"))  # unchanged
+        self.assertEqual(inv.total_refunded, Decimal("30.00"))
+        self.assertEqual(inv.balance, inv.agreed_total - Decimal("130.00"))
+        refund_rows = [p for p in inv.payments_snapshot if p["kind"] == "refund"]
+        self.assertEqual(len(refund_rows), 1)
+        self.assertEqual(refund_rows[0]["amount"], "30.00")
+
+    def test_pdf_renders_with_a_refund_row(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND
+        )
+        inv = self._issue()
+        from bookings.invoices import render_invoice_pdf
+
+        pdf = render_invoice_pdf(inv)
+        self.assertTrue(pdf.startswith(b"%PDF"))
 
     def test_numbers_are_sequential(self):
         a = Invoice(job=self.job, kind=Invoice.Kind.DEPOSIT)
@@ -872,6 +920,193 @@ class JobPhotoTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "All done")
+
+    def _job(self):
+        return Job.objects.create(
+            user=make_user("photoowner"), title="Bedroom", status=Job.Status.NOT_STARTED,
+            agreed_price=Decimal("900.00"),
+        )
+
+    def test_upload_form_is_staff_only(self):
+        job = self._job()
+        url = reverse("bookings:project_detail", kwargs={"slug": job.slug})
+
+        self.client.force_login(job.user)
+        self.assertNotContains(self.client.get(url), "Add photo")
+
+        staff = User.objects.create_user(
+            username="photostaff", email="photostaff@example.com", password="pw1!pass",
+            is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(staff)
+        self.assertContains(self.client.get(url), "Add photo")
+
+    def test_staff_can_upload_a_photo_from_the_portal(self):
+        job = self._job()
+        staff = User.objects.create_user(
+            username="photostaff2", email="photostaff2@example.com", password="pw1!pass",
+            is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(staff)
+        resp = self.client.post(
+            reverse("bookings:project_detail", kwargs={"slug": job.slug}),
+            {"action": "add_photo", "image": tiny_png(), "caption": "First fix done"},
+        )
+        self.assertRedirects(
+            resp, reverse("bookings:project_detail", kwargs={"slug": job.slug})
+        )
+        photo = JobPhoto.objects.get(job=job)
+        self.assertEqual(photo.caption, "First fix done")
+
+    def test_invalid_photo_is_rejected(self):
+        job = self._job()
+        staff = User.objects.create_user(
+            username="photostaff3", email="photostaff3@example.com", password="pw1!pass",
+            is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(staff)
+        junk = SimpleUploadedFile("not-a-photo.png", b"not a real image", content_type="image/png")
+        self.client.post(
+            reverse("bookings:project_detail", kwargs={"slug": job.slug}),
+            {"action": "add_photo", "image": junk},
+        )
+        self.assertFalse(JobPhoto.objects.filter(job=job).exists())
+
+
+class JobChatTests(TestCase):
+    """The "Messages" thread on a booked job - customer<->staff chat that
+    unlocks once the deposit is paid (Job.chat_open/chat_unlocked)."""
+
+    def setUp(self):
+        self.customer = make_user("chatcust")
+        self.staff = User.objects.create_user(
+            username="chatstaff", email="chatstaff@example.com", password="pw1!pass",
+            is_staff=True, is_superuser=True,
+        )
+        self.job = Job.objects.create(
+            user=self.customer, title="Hall & stairs", status=Job.Status.NOT_STARTED,
+            agreed_price=Decimal("1000.00"), contact_name="Chat Customer",
+        )
+
+    def _url(self):
+        return reverse("bookings:project_detail", kwargs={"slug": self.job.slug})
+
+    def _post_url(self):
+        return reverse("bookings:post_job_message", kwargs={"slug": self.job.slug})
+
+    def test_chat_hidden_before_deposit_paid(self):
+        self.job.status = Job.Status.AWAITING_DEPOSIT
+        self.job.save()
+        self.client.force_login(self.customer)
+        resp = self.client.get(self._url())
+        self.assertNotContains(resp, "Messages")
+
+    def test_chat_form_shown_once_booked(self):
+        self.client.force_login(self.customer)
+        resp = self.client.get(self._url())
+        self.assertContains(resp, "Messages")
+        self.assertContains(resp, self._post_url())
+
+    @LOCMEM
+    def test_customer_can_post_a_message_and_staff_is_emailed(self):
+        self.client.force_login(self.customer)
+        resp = self.client.post(self._post_url(), {"body": "Can you fit Tuesday?"})
+        self.assertRedirects(resp, self._url())
+
+        msg = JobMessage.objects.get(job=self.job)
+        self.assertEqual(msg.sender, self.customer)
+        self.assertFalse(msg.is_staff_message)
+        self.assertFalse(msg.read_by_staff)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.job.reference, mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+
+    @LOCMEM
+    def test_staff_reply_is_marked_staff_and_emails_the_customer(self):
+        self.client.force_login(self.staff)
+        resp = self.client.post(self._post_url(), {"body": "Yes, Tuesday works."})
+        self.assertRedirects(resp, self._url())
+
+        msg = JobMessage.objects.get(job=self.job)
+        self.assertTrue(msg.is_staff_message)
+        self.assertTrue(msg.read_by_staff)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [self.customer.email])
+
+    def test_empty_message_is_rejected(self):
+        self.client.force_login(self.customer)
+        self.client.post(self._post_url(), {"body": ""})
+        self.assertFalse(JobMessage.objects.exists())
+
+    @IN_MEMORY_STORAGE
+    def test_message_with_a_photo_renders_in_the_thread(self):
+        self.client.force_login(self.customer)
+        self.client.post(self._post_url(), {"body": "", "photo": tiny_png()})
+        msg = JobMessage.objects.get(job=self.job)
+        self.assertTrue(msg.photo)
+
+        self.client.force_login(self.staff)
+        resp = self.client.get(self._url())
+        self.assertContains(resp, "job-chat__photo")
+
+    def test_stranger_cannot_post_or_view(self):
+        stranger = make_user("stranger")
+        self.client.force_login(stranger)
+        self.assertEqual(self.client.get(self._url()).status_code, 404)
+        self.assertEqual(
+            self.client.post(self._post_url(), {"body": "hi"}).status_code, 404
+        )
+        self.assertFalse(JobMessage.objects.exists())
+
+    def test_read_only_once_complete_no_new_messages(self):
+        JobMessage.objects.create(job=self.job, sender=self.customer, body="Before")
+        self.job.status = Job.Status.COMPLETE
+        self.job.save()
+
+        self.client.force_login(self.customer)
+        resp = self.client.get(self._url())
+        self.assertContains(resp, "read-only")
+        self.assertContains(resp, "Before")
+
+        post_resp = self.client.post(self._post_url(), {"body": "Too late"})
+        self.assertEqual(post_resp.status_code, 404)
+        self.assertEqual(JobMessage.objects.count(), 1)
+
+    def test_hidden_entirely_when_cancelled_with_no_history(self):
+        self.job.status = Job.Status.CANCELLED
+        self.job.save()
+        self.client.force_login(self.customer)
+        resp = self.client.get(self._url())
+        self.assertNotContains(resp, "Messages")
+
+    def test_staff_viewing_the_job_marks_customer_messages_read(self):
+        JobMessage.objects.create(job=self.job, sender=self.customer, body="Ping")
+        self.assertEqual(
+            JobMessage.objects.filter(read_by_staff=False).count(), 1
+        )
+        self.client.force_login(self.staff)
+        self.client.get(self._url())
+        self.assertEqual(
+            JobMessage.objects.filter(read_by_staff=False).count(), 0
+        )
+
+    def test_manage_dashboard_shows_unread_badge(self):
+        JobMessage.objects.create(job=self.job, sender=self.customer, body="Ping")
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("bookings:manage"))
+        self.assertContains(resp, "1 new message")
+        self.assertContains(resp, "1</strong> unread message")
+
+    def test_nav_pill_shown_for_admin_only(self):
+        JobMessage.objects.create(job=self.job, sender=self.customer, body="Ping")
+
+        self.client.force_login(self.staff)
+        self.assertContains(self.client.get(reverse("core:home")), "1 unread")
+
+        self.client.force_login(self.customer)
+        self.assertNotContains(self.client.get(reverse("core:home")), "unread")
 
 
 STRIPE_ON = override_settings(
@@ -1072,6 +1307,17 @@ class StripePaymentTests(TestCase):
         self.job.refresh_from_db()  # now NOT_STARTED, balance 800
         return self.job
 
+    def test_amount_box_is_hidden_until_part_is_chosen(self):
+        """The part-payment amount box starts hidden and the JS that reveals
+        it is loaded - typing an amount without picking "part" should be
+        impossible in the UI, not just silently ignored server-side."""
+        self._live_job()
+        resp = self.client.get(
+            reverse("bookings:pay_balance", kwargs={"slug": self.job.slug})
+        )
+        self.assertContains(resp, 'id="pay-choose-amount" hidden')
+        self.assertContains(resp, "pay_choose.js")
+
     @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
     def test_pay_full_balance(self, _mock):
         self._live_job()
@@ -1103,6 +1349,59 @@ class StripePaymentTests(TestCase):
             {"choice": "part", "amount": "5000"},
         )
         self.assertEqual(CardPayment.objects.count(), 0)
+
+    # -- overpayment hardening: balance shrinks mid-checkout --------
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_stale_checkout_amount_is_rejected_on_get(self, _mock):
+        self._live_job()  # balance £800
+        cp = self._card_payment(purpose=CardPayment.Purpose.PART, amount=Decimal("500.00"))
+        # balance shrinks to £100 - the £500 attempt is now stale
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700.00"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        resp = self.client.get(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug})
+        )
+        self.assertRedirects(
+            resp, reverse("bookings:pay_balance", kwargs={"slug": self.job.slug})
+        )
+        cp.refresh_from_db()
+        self.assertEqual(cp.status, CardPayment.Status.FAILED)
+
+    @patch("bookings.views.create_payment_intent", return_value=FAKE_INTENT)
+    def test_stale_checkout_amount_is_rejected_on_post(self, _mock):
+        self._live_job()
+        cp = self._card_payment(purpose=CardPayment.Purpose.PART, amount=Decimal("500.00"))
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700.00"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        resp = self.client.post(
+            reverse("bookings:checkout", kwargs={"slug": cp.slug}),
+            {"name": "Sam Payer", "email": "sam@example.com", "billing": "{}"},
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertFalse(resp.json()["ok"])
+
+    @patch("bookings.views.retrieve_intent", return_value={"status": "succeeded"})
+    def test_overpayment_that_still_happens_is_flagged_in_the_owner_email(self, _mock):
+        self._live_job()  # balance £800
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700.00"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        # balance now £100 - but this CardPayment (created before the above
+        # payment landed) was never re-checked, simulating the residual race
+        # between the return page/webhook and Stripe already having charged.
+        cp = self._card_payment(purpose=CardPayment.Purpose.PART, amount=Decimal("500.00"))
+        self.client.get(
+            reverse("bookings:checkout_return", kwargs={"slug": cp.slug})
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.balance_due, Decimal("-400.00"))
+        self.assertIn("OVERPAID", mail.outbox[-1].body)
 
     # -- auto-invoice + owner notification on success --------------
 
@@ -1294,6 +1593,173 @@ class StaffManageTests(TestCase):
         })
         self.job.refresh_from_db()
         self.assertEqual(self.job.total_paid, Decimal("700"))
+
+    # -- refunds: recording one, and the customer's request -----------
+
+    def test_record_refund_from_portal(self):
+        """A refund is store credit: agreed price and paid-so-far are left
+        alone, and it's the outstanding balance that drops."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.job.refresh_from_db()
+        balance_before = self.job.balance_due  # £800
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "50", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.agreed_price, Decimal("1500"))  # unchanged
+        self.assertEqual(self.job.total_paid, Decimal("700"))  # unchanged
+        self.assertEqual(self.job.total_refunded, Decimal("50"))
+        self.assertEqual(self.job.balance_due, balance_before - Decimal("50"))
+
+    def test_a_second_refund_stacks_on_the_first(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        for _ in range(2):
+            self.client.post(self._detail(), {
+                "action": "record_payment", "amount": "50", "kind": "refund",
+                "method": "bank", "received_on": timezone.localdate().isoformat(),
+                "reference": "", "note": "",
+            })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("100"))
+        self.assertEqual(self.job.balance_due, Decimal("700"))  # 1500-700-100
+
+    def test_refund_cannot_exceed_what_was_paid(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "500", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("0"))  # rejected
+
+    def test_refund_cannot_exceed_what_is_left_to_refund(self):
+        """Can't refund past what's already been refunded once - the cap is
+        against what's still refundable, not the original paid total."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("80"), kind=Payment.Kind.REFUND,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "50", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("80"))  # second one rejected
+
+    def test_staff_can_resolve_a_refund_request(self):
+        rr = RefundRequest.objects.create(
+            job=self.job, requested_by=self.customer, reason="Wrong colour fitted",
+        )
+        self.client.post(self._detail(), {"action": "resolve_refund"})
+        rr.refresh_from_db()
+        self.assertEqual(rr.status, RefundRequest.Status.RESOLVED)
+        self.assertIsNotNone(rr.resolved_at)
+
+    def test_staff_sees_the_refund_banner(self):
+        RefundRequest.objects.create(
+            job=self.job, requested_by=self.customer, reason="Wrong colour fitted",
+        )
+        resp = self.client.get(self._detail())
+        self.assertContains(resp, "Refund requested")
+        self.assertContains(resp, "Wrong colour fitted")
+
+    def test_manage_dashboard_shows_refund_badge(self):
+        RefundRequest.objects.create(job=self.job, requested_by=self.customer, reason="x")
+        resp = self.client.get(reverse("bookings:manage"))
+        self.assertContains(resp, "1 refund request")
+
+    @LOCMEM
+    def test_customer_can_request_a_refund(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.client.force_login(self.customer)
+        resp = self.client.post(
+            reverse("bookings:request_refund", kwargs={"slug": self.job.slug}),
+            {"reason": "It's the wrong colour"},
+        )
+        self.assertRedirects(resp, self._detail())
+        rr = RefundRequest.objects.get(job=self.job)
+        self.assertEqual(rr.reason, "It's the wrong colour")
+        self.assertEqual(rr.requested_by, self.customer)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Refund requested", mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+
+    def test_refund_request_needs_a_reason(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.client.force_login(self.customer)
+        self.client.post(
+            reverse("bookings:request_refund", kwargs={"slug": self.job.slug}),
+            {"reason": ""},
+        )
+        self.assertFalse(RefundRequest.objects.exists())
+
+    def test_cannot_request_a_refund_with_nothing_paid(self):
+        self.client.force_login(self.customer)
+        self.client.post(
+            reverse("bookings:request_refund", kwargs={"slug": self.job.slug}),
+            {"reason": "Change of mind"},
+        )
+        self.assertFalse(RefundRequest.objects.exists())
+
+    def test_cannot_open_a_second_refund_request(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        RefundRequest.objects.create(
+            job=self.job, requested_by=self.customer, reason="First one",
+        )
+        self.client.force_login(self.customer)
+        self.client.post(
+            reverse("bookings:request_refund", kwargs={"slug": self.job.slug}),
+            {"reason": "Second one"},
+        )
+        self.assertEqual(RefundRequest.objects.filter(job=self.job).count(), 1)
+
+    def test_staff_cannot_request_a_refund(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("100"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        resp = self.client.post(
+            reverse("bookings:request_refund", kwargs={"slug": self.job.slug}),
+            {"reason": "On behalf of the customer"},
+        )
+        self.assertEqual(resp.status_code, 404)
 
     def test_issue_final_invoice_from_portal(self):
         Job.objects.filter(pk=self.job.pk).update(

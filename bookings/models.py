@@ -4,10 +4,13 @@ from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
 from django.utils.text import slugify
+
+from .validators import validate_job_photo, validate_message_photo
 
 
 # ==========================================================================
@@ -399,22 +402,56 @@ class Job(models.Model):
 
     @property
     def total_paid(self):
-        total = self.payments.aggregate(t=Sum("amount"))["t"]
+        """Real cash received - a Refund is never netted in here, so this
+        always matches the customer's actual payment history. It's
+        `total_refunded` (below) that comes off the balance instead."""
+        total = self.payments.exclude(
+            kind=Payment.Kind.REFUND
+        ).aggregate(t=Sum("amount"))["t"]
+        return total or Decimal("0.00")
+
+    @property
+    def total_refunded(self):
+        """Treated like store credit: it comes straight off what's still
+        owed, without touching the agreed price or the paid-so-far figure -
+        so a refund always makes the balance drop, full stop."""
+        total = self.payments.filter(
+            kind=Payment.Kind.REFUND
+        ).aggregate(t=Sum("amount"))["t"]
         return total or Decimal("0.00")
 
     @property
     def balance_due(self):
         if self.agreed_price is None:
             return None
-        return self.agreed_price - self.total_paid
+        return self.agreed_price - self.total_paid - self.total_refunded
 
     @property
     def deposit_paid(self):
         return self.payments.filter(kind=Payment.Kind.BOOKING_FEE).exists()
 
     @property
+    def open_refund_request(self):
+        return self.refund_requests.filter(
+            status=RefundRequest.Status.REQUESTED
+        ).order_by("-created_at").first()
+
+    @property
     def is_live(self):
         return self.status in self.LIVE_STATUSES
+
+    @property
+    def chat_open(self):
+        """True while new chat messages can still be sent - once the deposit
+        is paid (Not started) and while work is Underway."""
+        return self.status in {self.Status.NOT_STARTED, self.Status.UNDERWAY}
+
+    @property
+    def chat_unlocked(self):
+        """True once the chat thread should be shown at all. Stays true after
+        Complete/Cancelled so existing messages stay readable, even though
+        chat_open (above) is False by then and no new ones can be sent."""
+        return self.is_live or self.status == self.Status.CANCELLED
 
     @property
     def status_step(self):
@@ -436,10 +473,11 @@ class Job(models.Model):
 # ---- work photos ---------------------------------------------------------
 
 class JobPhoto(models.Model):
-    """A photo of the work, uploaded by Joseph through the admin."""
+    """A photo of the work, uploaded by staff through the admin or the
+    "Manage this job" panel on the job's own portal page."""
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="photos")
-    image = models.ImageField(upload_to=job_photo_upload_to)
+    image = models.ImageField(upload_to=job_photo_upload_to, validators=[validate_job_photo])
     caption = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -458,6 +496,53 @@ class JobPhoto(models.Model):
         return _cloudinary_variant(self.image.url, "f_auto,q_auto,c_limit,w_1800")
 
 
+# ---- job chat: the customer<->staff message thread on a booked job -------
+# Unlocked once the booking fee is paid (Job.chat_open/chat_unlocked above).
+# Deliberately append-only - it's a log of the conversation, not editable.
+
+class JobMessage(models.Model):
+    """One message in a job's chat thread, from either the customer or a
+    member of staff (anyone with is_site_admin)."""
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="job_messages"
+    )
+    is_staff_message = models.BooleanField(default=False)
+    body = models.TextField(blank=True, default="")
+    photo = models.ImageField(
+        upload_to=job_photo_upload_to, blank=True, null=True,
+        validators=[validate_message_photo],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Only meaningful for a customer message - tracks whether any member of
+    # staff has opened this job's portal page since it was sent. Powers the
+    # unread badge in the nav bar and on the manage dashboard.
+    read_by_staff = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        who = "Staff" if self.is_staff_message else "Customer"
+        return f"{who} message on {self.job.reference}"
+
+    def save(self, *args, **kwargs):
+        # A staff member's own message can't be "unread by staff".
+        if self.is_staff_message:
+            self.read_by_staff = True
+        super().save(*args, **kwargs)
+
+    @property
+    def thumb_url(self):
+        return _cloudinary_variant(self.photo.url, "f_auto,q_auto,c_limit,w_900") if self.photo else ""
+
+    @property
+    def full_url(self):
+        return _cloudinary_variant(self.photo.url, "f_auto,q_auto,c_limit,w_1800") if self.photo else ""
+
+
 # ---- money: payments, invoices, itemised invoice lines -------------------
 # Payment is the ledger - the single source of truth for what's been paid,
 # whether entered by hand or written by a successful CardPayment below.
@@ -471,6 +556,7 @@ class Payment(models.Model):
         BOOKING_FEE = "booking_fee", "Booking fee (deposit)"
         BALANCE = "balance", "Balance payment"
         PART = "part", "Part payment"
+        REFUND = "refund", "Refund"
 
     class Method(models.TextChoices):
         CARD = "card", "Card (online)"
@@ -480,7 +566,12 @@ class Payment(models.Model):
         OTHER = "other", "Other"
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="payments")
-    amount = models.DecimalField(max_digits=9, decimal_places=2)
+    # Always a plain positive amount, even for a refund - Job.total_paid is
+    # what subtracts it. Keeps the DB free of sign-mixing bugs.
+    amount = models.DecimalField(
+        max_digits=9, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.BALANCE)
     method = models.CharField(max_length=10, choices=Method.choices, default=Method.BANK)
     reference = models.CharField(
@@ -502,6 +593,40 @@ class Payment(models.Model):
         self.job.recompute_after_payment()
 
 
+class RefundRequest(models.Model):
+    """A customer asking for money back, with their reason. The actual
+    refund (Stripe dashboard + a Payment with kind=refund here) is a manual
+    step staff take after discussing it on the job's chat thread - this
+    model just tracks that a request was made and why, until it's resolved.
+    """
+
+    class Status(models.TextChoices):
+        REQUESTED = "requested", "Requested"
+        RESOLVED = "resolved", "Resolved"
+
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="refund_requests")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="refund_requests"
+    )
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.REQUESTED
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Refund request on {self.job.reference} ({self.get_status_display()})"
+
+    def resolve(self):
+        self.status = self.Status.RESOLVED
+        self.resolved_at = timezone.now()
+        self.save(update_fields=["status", "resolved_at"])
+
+
 class Invoice(models.Model):
     """A downloadable invoice / receipt. Values are snapshotted at issue so a
     saved PDF stays a true record even if the job changes afterwards."""
@@ -518,6 +643,7 @@ class Invoice(models.Model):
 
     agreed_total = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     total_paid = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    total_refunded = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     # Frozen list of the payments this invoice accounts for, captured at issue
     # so a re-download always shows the same ledger. Each entry:
     # {"label": str, "method": str, "date": "YYYY-MM-DD", "amount": "123.45"}
@@ -540,7 +666,7 @@ class Invoice(models.Model):
 
     @property
     def balance(self):
-        return self.agreed_total - self.total_paid
+        return self.agreed_total - self.total_paid - self.total_refunded
 
     def _relevant_payments(self):
         qs = self.job.payments.all()
@@ -550,9 +676,17 @@ class Invoice(models.Model):
 
     def snapshot_from_job(self):
         """Freeze the money fields and the payment ledger from the job as it
-        stands right now."""
+        stands right now. Like Job.total_paid/total_refunded, a refund is
+        kept separate from ordinary payments rather than netted into them."""
         payments = list(self._relevant_payments())
-        self.total_paid = sum((p.amount for p in payments), Decimal("0.00"))
+        self.total_paid = sum(
+            (p.amount for p in payments if p.kind != Payment.Kind.REFUND),
+            Decimal("0.00"),
+        )
+        self.total_refunded = sum(
+            (p.amount for p in payments if p.kind == Payment.Kind.REFUND),
+            Decimal("0.00"),
+        )
         self.agreed_total = self.job.agreed_price or Decimal("0.00")
         self.payments_snapshot = [
             {
@@ -560,6 +694,7 @@ class Invoice(models.Model):
                 "method": p.get_method_display(),
                 "date": p.received_on.isoformat(),
                 "amount": str(p.amount),
+                "kind": p.kind,
             }
             for p in payments
         ]

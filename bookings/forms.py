@@ -3,7 +3,10 @@ import datetime as _dt
 from django import forms
 from django.utils import timezone
 
-from .models import CallRequest, FlooringRate, Job, Payment, QuoteRequest
+from .models import (
+    CallRequest, FlooringRate, Job, JobMessage, JobPhoto, Payment,
+    QuoteRequest, RefundRequest,
+)
 
 
 # ==========================================================================
@@ -312,7 +315,15 @@ class ConfirmBookingForm(forms.ModelForm):
 
 
 class RecordPaymentForm(forms.ModelForm):
-    """Staff-only: log a payment the customer has made (cash / bank / card)."""
+    """Staff-only: log a payment the customer has made (cash / bank / card),
+    or a refund (kind=refund - typed as a normal positive amount, e.g. 50
+    for £50 back). A refund is treated like store credit: it comes straight
+    off the outstanding balance without touching the agreed price or the
+    paid-so-far figure (Job.total_refunded is what subtracts it)."""
+
+    def __init__(self, *args, job=None, **kwargs):
+        self.job = job
+        super().__init__(*args, **kwargs)
 
     class Meta:
         model = Payment
@@ -324,6 +335,69 @@ class RecordPaymentForm(forms.ModelForm):
         if amount is None or amount <= 0:
             raise forms.ValidationError("Enter an amount greater than zero.")
         return amount
+
+    def clean(self):
+        cleaned = super().clean()
+        amount = cleaned.get("amount")
+        if (
+            cleaned.get("kind") == Payment.Kind.REFUND
+            and amount is not None and self.job is not None
+        ):
+            refundable = self.job.total_paid - self.job.total_refunded
+            if amount > refundable:
+                self.add_error(
+                    "amount",
+                    f"Can't refund more than the £{refundable:.2f} still "
+                    "available to refund.",
+                )
+        return cleaned
+
+
+class RefundRequestForm(forms.ModelForm):
+    """Customer-only: ask for a refund and say why."""
+
+    class Meta:
+        model = RefundRequest
+        fields = ["reason"]
+        widgets = {
+            "reason": forms.Textarea(
+                attrs={"rows": 3, "placeholder": "Tell me what's wrong and I'll sort it out."}
+            ),
+        }
+
+
+class JobPhotoForm(forms.ModelForm):
+    """Staff-only: add a work-in-progress photo from the job's own portal
+    page, instead of needing the admin."""
+
+    class Meta:
+        model = JobPhoto
+        fields = ["image", "caption"]
+        widgets = {
+            "caption": forms.TextInput(
+                attrs={"placeholder": "e.g. Subfloor prepped, ready for LVT"}
+            ),
+        }
+
+
+# Job chat: used by both the customer and staff on the project detail page.
+class JobMessageForm(forms.ModelForm):
+    """One message on a job's chat thread - a note, a photo, or both."""
+
+    class Meta:
+        model = JobMessage
+        fields = ["body", "photo"]
+        widgets = {
+            "body": forms.Textarea(
+                attrs={"rows": 2, "placeholder": "Ask a question, leave an update..."}
+            ),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        if not (cleaned.get("body") or "").strip() and not cleaned.get("photo"):
+            raise forms.ValidationError("Write a message or attach a photo.")
+        return cleaned
 
 
 # Back to the AI quote flow: the follow-up questions page.

@@ -29,6 +29,17 @@ class ContactPageTests(TestCase):
         self.assertTemplateUsed(resp, "contact/index.html")
         self.assertContains(resp, "Contact us")
         self.assertContains(resp, "coverage-map")
+        self.assertContains(resp, "contact-map-card__logo")
+
+    @override_settings(GEOAPIFY_API_KEY="")
+    def test_map_has_no_tile_key_when_unconfigured(self):
+        resp = self.client.get(reverse("contact:index"))
+        self.assertContains(resp, 'data-tile-key=""')
+
+    @override_settings(GEOAPIFY_API_KEY="test-geoapify-key")
+    def test_map_carries_the_configured_tile_key(self):
+        resp = self.client.get(reverse("contact:index"))
+        self.assertContains(resp, 'data-tile-key="test-geoapify-key"')
 
 
 class SiteContactModelTests(TestCase):

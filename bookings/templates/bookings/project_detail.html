@@ -99,6 +99,9 @@
                 <tbody>
                     <tr><th>Agreed price</th><td>&pound;{{ job.agreed_price|floatformat:2 }}</td></tr>
                     <tr><th>Paid so far</th><td>&pound;{{ job.total_paid|floatformat:2 }}</td></tr>
+                    {% if job.total_refunded %}
+                        <tr><th>Refunded</th><td>&minus;&pound;{{ job.total_refunded|floatformat:2 }}</td></tr>
+                    {% endif %}
                     <tr class="job-money__due">
                         <th>Balance outstanding</th>
                         <td>&pound;{{ job.balance_due|floatformat:2 }}</td>
@@ -134,15 +137,35 @@
                 </thead>
                 <tbody>
                     {% for p in payments %}
-                        <tr>
+                        <tr{% if p.kind == "refund" %} class="job-payments__refund"{% endif %}>
                             <td>{{ p.received_on|date:"j M Y" }}</td>
                             <td>{{ p.get_kind_display }}</td>
                             <td>{{ p.get_method_display }}</td>
-                            <td>&pound;{{ p.amount|floatformat:2 }}</td>
+                            <td>{% if p.kind == "refund" %}&minus;{% endif %}&pound;{{ p.amount|floatformat:2 }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    {% endif %}
+
+    {# ---- refund request (customer only) --------------------------- #}
+    {% if refund_form and job.total_paid > 0 %}
+        <div class="bookings-card">
+            <h2>Need a refund?</h2>
+            {% if job.open_refund_request %}
+                <p>
+                    Refund requested on {{ job.open_refund_request.created_at|date:"j M Y" }}
+                    &mdash; I'll be in touch to sort it out. Feel free to add more
+                    detail in the messages below too.
+                </p>
+            {% else %}
+                <form method="post" action="{% url 'bookings:request_refund' slug=job.slug %}" class="bk-form">
+                    {% csrf_token %}
+                    {% include "bookings/_field.html" with field=refund_form.reason %}
+                    <button type="submit" class="bk-btn bk-btn--ghost">Request a refund</button>
+                </form>
+            {% endif %}
         </div>
     {% endif %}
 
@@ -165,19 +188,87 @@
     {% endif %}
 
     {# ---- photos ---------------------------------------------- #}
-    {% if photos %}
+    {% if photos or can_manage %}
         <div class="bookings-card">
             <h2>Photos of the work</h2>
-            <div class="job-photos">
-                {% for photo in photos %}
-                    <figure>
-                        <a href="{{ photo.full_url }}" target="_blank" rel="noopener">
-                            <img src="{{ photo.thumb_url }}" alt="{{ photo.caption }}" loading="lazy">
-                        </a>
-                        {% if photo.caption %}<figcaption>{{ photo.caption }}</figcaption>{% endif %}
-                    </figure>
-                {% endfor %}
-            </div>
+            {% if photos %}
+                <div class="job-photos">
+                    {% for photo in photos %}
+                        <figure>
+                            <a href="{{ photo.full_url }}" target="_blank" rel="noopener">
+                                <img src="{{ photo.thumb_url }}" alt="{{ photo.caption }}" loading="lazy">
+                            </a>
+                            {% if photo.caption %}<figcaption>{{ photo.caption }}</figcaption>{% endif %}
+                        </figure>
+                    {% endfor %}
+                </div>
+            {% elif can_manage %}
+                <p>No photos yet — add the first one below.</p>
+            {% endif %}
+
+            {% if photo_form %}
+                <form method="post" enctype="multipart/form-data" class="bk-form job-photos__form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="add_photo">
+                    {% include "bookings/_field.html" with field=photo_form.image %}
+                    {% include "bookings/_field.html" with field=photo_form.caption %}
+                    <button type="submit" class="bk-btn bk-btn--primary">Add photo</button>
+                </form>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {# ---- job chat ---------------------------------------------- #}
+    {% if chat_visible %}
+        <div class="bookings-card">
+            <h2>Messages</h2>
+            <p class="job-chat__lead">
+                Questions, concerns, updates &mdash; leave them here and
+                {% if can_manage %}the customer{% else %}I{% endif %} will see them.
+            </p>
+
+            {% if chat_messages %}
+                <div class="job-chat">
+                    {% for msg in chat_messages %}
+                        <div class="job-chat__msg {% if msg.sender_id == request.user.id %}is-mine{% else %}is-theirs{% endif %}">
+                            <div class="job-chat__bubble">
+                                <p class="job-chat__meta">
+                                    <strong>
+                                        {% if msg.is_staff_message %}{{ msg.sender.get_username }}
+                                        {% else %}{{ job.contact_name|default:job.user.get_username }}{% endif %}
+                                    </strong>
+                                    <span>{{ msg.created_at|date:"j M, g:ia" }}</span>
+                                </p>
+                                {% if msg.body %}<p class="job-chat__body">{{ msg.body|linebreaksbr }}</p>{% endif %}
+                                {% if msg.photo %}
+                                    <a href="{{ msg.full_url }}" target="_blank" rel="noopener">
+                                        <img class="job-chat__photo" src="{{ msg.thumb_url }}" alt="" loading="lazy">
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="job-chat__empty">No messages yet.</p>
+            {% endif %}
+
+            {% if message_form %}
+                <form method="post" action="{% url 'bookings:post_job_message' slug=job.slug %}"
+                      class="bk-form job-chat__form" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% include "bookings/_field.html" with field=message_form.body %}
+                    {% include "bookings/_field.html" with field=message_form.photo %}
+                    {% if message_form.non_field_errors %}
+                        <div class="bk-form__errors">
+                            {% for error in message_form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+                        </div>
+                    {% endif %}
+                    <button type="submit" class="bk-btn bk-btn--primary">Send</button>
+                </form>
+            {% else %}
+                <p class="job-chat__closed">This job is {{ job.get_status_display|lower }} &mdash; the chat is now read-only.</p>
+            {% endif %}
         </div>
     {% endif %}
 

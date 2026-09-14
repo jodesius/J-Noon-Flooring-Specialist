@@ -18,6 +18,12 @@ urlpatterns = [
         views.invoice_pdf,
         name="invoice_pdf",
     ),
+    path(
+        "projects/<uuid:slug>/message/", views.post_job_message, name="post_job_message"
+    ),
+    path(
+        "projects/<uuid:slug>/refund/", views.request_refund, name="request_refund"
+    ),
     path("projects/<uuid:slug>/pay/deposit/", views.pay_deposit, name="pay_deposit"),
     path("projects/<uuid:slug>/pay/balance/", views.pay_balance, name="pay_balance"),
     path("pay/<uuid:slug>/", views.checkout, name="checkout"),

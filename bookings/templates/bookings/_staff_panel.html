@@ -9,6 +9,27 @@ Context: job, confirm_form, payment_form, admin_url.
         <span class="job-status job-status--{{ job.status }}">{{ job.get_status_display }}</span>
     </p>
 
+    {% if job.open_refund_request %}
+        <div class="staff-panel__refund">
+            <h3>Refund requested</h3>
+            <p>
+                <strong>{{ job.open_refund_request.requested_by.get_username }}</strong>
+                asked for a refund on {{ job.open_refund_request.created_at|date:"j M Y" }}:
+            </p>
+            <p class="staff-panel__refund-reason">&ldquo;{{ job.open_refund_request.reason }}&rdquo;</p>
+            <p class="staff-panel__note">
+                Discuss it in the messages below, then record any refund
+                payment ("Record a payment" &rarr; kind: Refund) and mark
+                this resolved.
+            </p>
+            <form method="post" class="staff-form--inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="resolve_refund">
+                <button type="submit" class="bk-btn bk-btn--ghost bk-btn--sm">Mark resolved</button>
+            </form>
+        </div>
+    {% endif %}
+
     {% if job.quote_request %}{% with q=job.quote_request %}
         <div class="staff-panel__brief">
             <h3>From quote {{ q.reference }}</h3>
@@ -174,7 +195,6 @@ Context: job, confirm_form, payment_form, admin_url.
 
     <hr class="staff-panel__rule">
     <p class="staff-panel__admin">
-        <a href="{{ admin_url }}">Open in admin</a> to upload work photos or edit
-        anything else.
+        <a href="{{ admin_url }}">Open in admin</a> for anything fiddlier.
     </p>
 </div>

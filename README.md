@@ -77,7 +77,8 @@ credentials live in the repository.
 | Images | Pillow (upload validation) |
 | Media storage | Cloudinary (`django-cloudinary-storage`); local `media/` folder when unconfigured |
 | Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
-| Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map, with OpenStreetMap tiles — no API key |
+| Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map |
+| Map tiles | Geoapify (free tier, commercial use allowed) when `GEOAPIFY_API_KEY` is set; falls back to OpenStreetMap's own raw tile server otherwise — fine for local dev, not for a live site's regular traffic (their usage policy blocks automated/heavy use) |
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
 | Calendar | Google Calendar API via a service account (`google-auth` + `requests`) for the "book a call" feature — optional, off until a calendar and key are configured |
 | PDF | `reportlab` — generates the customer portal's downloadable invoices (logo, itemised line-item table, payment ledger) |
@@ -114,7 +115,10 @@ Dependencies are pinned in `requirements.txt`.
   (Laminate, LVT, Amtico, Engineered & Solid Wood, Vinyl, Carpet & Carpet
   Tiles, Screeding & Floor Prep), each with a one-line summary and a
   numbered "order of works". All static content for now; images can be
-  added later.
+  added later. A **"Your projects" shortcut** appears in the hero and the
+  nav menu while the signed-in customer has a live job (booked, not started,
+  or underway) — it drops away again once the job's complete or cancelled
+  (`core.context_processors.active_job`).
 ### Bookings (`bookings`)
 
 - **`/bookings/`** — landing page. Signed out: a *sign in / register* gate.
@@ -224,10 +228,23 @@ Dependencies are pinned in `requirements.txt`.
   customer's jobs. **`/bookings/projects/<uuid>/`** shows one job: a
   not-started → underway → complete progress bar, the work summary, the
   agreed price / paid-so-far / outstanding balance, a table of every
-  payment, downloadable **PDF invoices**, and a grid of **work photos**
-  Joseph uploads through the admin. UUID slugs and an owner-or-staff check
+  payment, downloadable **PDF invoices**, and a grid of **work photos** a
+  Site Administrator can add right there on the job's own page (image +
+  optional caption, no need to go into the admin) — JPEG/PNG/WebP, 10MB max,
+  Pillow-verified. UUID slugs and an owner-or-staff check
   on every view — no id is ever exposed and one account can't reach
   another's project.
+- **A "Messages" chat thread** unlocks on the project page once the booking
+  fee is paid (`Job.chat_open` — *Booked* or *Underway*), so the customer and
+  any Site Administrator can leave notes, questions and photos on the job as
+  it progresses. Own messages sit right-aligned, the other side's left.
+  Read-only once the job's *Complete* or *Cancelled* (history stays, the
+  form goes). Posting emails whoever didn't send it — Joseph for a customer
+  message, the customer directly for a staff reply — and a customer message
+  also shows as an **unread pill next to any admin's name in the nav** (every
+  page, links straight to `/bookings/manage/`) and a **"N new messages"**
+  badge on that job's card there, both clearing the moment a Site
+  Administrator opens the job.
 - **Joseph runs the whole job from that same portal page.** When a Site
   Administrator opens any customer's project, a **"Manage this job"** panel
   appears. It opens with a **briefing box** — if the job came from an online
@@ -247,12 +264,19 @@ Dependencies are pinned in `requirements.txt`.
     *Complete* → reopen.
   - Any active stage → a **"Record a payment"** form and **"Issue
     booking-fee receipt" / "Issue final invoice"** buttons.
-  - A link to the admin for photo uploads and anything fiddlier.
+  - A link to the admin for anything fiddlier.
 - **`/bookings/manage/`** (Site Administrators only, 404 otherwise) — a
   dashboard of **every** booking with status-filter chips and a count of
   how many need action, each card linking to that job's portal page.
-  Reached from a staff-only **"Manage bookings"** card on `/bookings/` and
-  a link on the customer projects page.
+  Reached from a **"Manage bookings"** button in the nav menu and the home
+  hero (admin/superuser only — `user.is_site_admin`), a staff-only card on
+  `/bookings/`, and a link on the customer projects page.
+**Payments.** Money moves through the portal in four ways — the booking
+fee, a balance/part payment by card, a cash/bank payment staff record by
+hand, and a refund — and all four end up in the same place, the `Payment`
+ledger, so `Job.total_paid` / `total_refunded` / `balance_due` always tell
+one consistent story regardless of how the money moved.
+
 - **The booking fee is 20% of the agreed price** (`Job.BOOKING_FEE_PERCENT`,
   a computed property — no stored field to drift), a non-refundable deposit
   that secures the slot and comes off the final balance.
@@ -260,7 +284,11 @@ Dependencies are pinned in `requirements.txt`.
   *Awaiting booking fee* screen shows the customer a **"Pay £X booking fee
   now"** button, and a live job with a balance shows **"Make a payment"** →
   a screen to pay the **full balance or a part-amount** (any amount up to
-  the balance — they can come back and pay more whenever). Both lead to
+  the balance — they can come back and pay more whenever). The part-amount
+  box only appears once "Pay part of it" is actually selected (it's hidden
+  by default, next to "full" being the pre-ticked option) so there's no way
+  to type an amount that then gets silently ignored in favour of charging
+  the whole balance. Both lead to
   **our own branded checkout page** (`/bookings/pay/<uuid>/`): our layout,
   the customer's name / email / job address / a "I authorise this payment"
   checkbox, and **Stripe Elements** for the billing address and card
@@ -268,12 +296,14 @@ Dependencies are pinned in `requirements.txt`.
   only ever handles the PaymentIntent id and status (PCI SAQ A). A
   `CardPayment` row tracks each attempt. Hitting **"Pay"** shows the same
   full-screen **"please wait" overlay** as the AI quote ("Your payment is
-  being processed… please don't close or refresh the page"), disables the
-  button, and warns the browser's own way if they try to navigate away
-  mid-payment — Stripe's PaymentIntent model + the re-use logic in
-  `_start_card_payment` already stop a double-click from ever creating a
-  second charge; this is purely to stop the customer worrying it didn't work
-  and trying again.
+  being processed… please don't close or refresh the page") and disables the
+  button. (No browser `beforeunload` "leave site?" prompt — its wording is
+  fixed by the browser and can't be customised, and it reads like "cancel
+  the payment?" to a customer who doesn't know we've gone to Stripe; the
+  overlay's own copy covers it instead.) Stripe's PaymentIntent model + the
+  re-use logic in `_start_card_payment` already stop a double-click from
+  ever creating a second charge; this is purely to stop the customer
+  worrying it didn't work and trying again.
 - **On a successful card payment, everything happens automatically**
   (`_finalise_card_payment`, idempotent, run by the Stripe **webhook** with
   the return page as a backup — whichever gets there first):
@@ -293,6 +323,38 @@ Dependencies are pinned in `requirements.txt`.
 - Staff still record **cash / bank transfers** by hand from the manage
   panel; card payments are the customer's own (staff get a 404 on the pay
   routes). With **no Stripe keys** set, the buttons simply don't appear.
+- **Overpayment is blocked, not just discouraged.** A part-payment can never
+  exceed the outstanding balance (validated server-side, tested) — and
+  since balances can now shrink mid-checkout (a refund landing while a
+  customer's payment tab is open), `checkout()` re-checks the amount
+  against the *current* balance on every load and every submit; a stale one
+  is failed and the customer's sent back to choose an amount again, before
+  Stripe is ever touched. On the vanishingly rare chance money still moves
+  before that catches it, `_finalise_card_payment` flags it loudly in
+  Joseph's email (`OVERPAID by £X`) rather than silently under-recording it.
+- **Refunds.** A customer who's paid something can **request a refund**
+  from their project page — just a reason, no amount (that's worked out on
+  the job's chat thread) — creating a `RefundRequest` that shows as a red
+  banner in the "Manage this job" panel, a badge on the manage dashboard's
+  job card, and a **"N refund" pill** next to any admin's name sitewide
+  (alongside the unread-messages one), and emails Joseph. Once it's sorted,
+  staff record the actual refund from **"Record a payment"** with
+  **kind: Refund** — typed as a normal positive number (e.g. `50` for £50
+  back) — then mark the request **resolved**. A refund is treated as
+  **store credit**: it comes straight off the outstanding balance and
+  nothing else — the **agreed price** and **paid so far** stay exactly as
+  they were, since those are the true history of what the job costs and
+  what's actually been paid in. `Job.total_refunded` (and the same field on
+  `Invoice`, frozen at issue) is the one place that subtraction happens, so
+  it reads correctly everywhere: a **"Refunded"** line appears on the Costs
+  card whenever there's been one, the job's Payments table shows it as
+  `-£50.00` in red, and the PDF lists it as its own deduction alongside the
+  payments. A refund can't exceed what's still available to refund (paid
+  so far, less anything already refunded) — so a second refund on the same
+  job correctly stacks against what's left, not the original total.
+  Recording it (with the method and a reference for your own bank's
+  transaction id if you want one noted) *is* the log of the money actually
+  leaving your account — there's nothing further to do.
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
   or a **final invoice**, issued from the manage panel or an admin action.
   The letterhead carries the **company logo** (fetched once from Cloudinary,
@@ -303,8 +365,9 @@ Dependencies are pinned in `requirements.txt`.
   subtotal always follows their sum), then every payment listed as its own
   line with date and method, then the balance. The line items, the payment
   ledger and the totals are **frozen at issue** (`payments_snapshot` +
-  `agreed_total` + `total_paid` on the `Invoice`) so a file downloaded today
-  says the same thing next year. Invoices come in three kinds — *Booking fee
+  `agreed_total` + `total_paid` + `total_refunded` on the `Invoice`) so a
+  file downloaded today says the same thing next year. Invoices come in
+  three kinds — *Booking fee
   receipt*, *Payment receipt* (a mid-job statement with a balance still
   showing), *Final invoice* — issued by hand from the manage panel **or
   automatically after a card payment** (see below).
@@ -312,7 +375,10 @@ Dependencies are pinned in `requirements.txt`.
   link, customer name / phone, address of works, agreed price, start date,
   status, notes; `booking_fee` is a computed 20% of the agreed price),
   `JobPhoto` (Cloudinary-backed, file removed
-  from storage on delete), `Payment` (amount, kind, method, date), `Invoice`
+  from storage on delete), `JobMessage` (the chat thread), `Payment`
+  (amount — always positive, a `MinValueValidator` backstops it — kind,
+  including `refund`, method, date), `RefundRequest` (job, requester,
+  reason, status requested/resolved), `Invoice`
   (auto number `INV-####`, kind, snapshotted totals + payment ledger) with
   `InvoiceLineItem` children (description, amount — their sum keeps the
   invoice's `agreed_total` in step). `QuoteRequest` gained a `reference`
@@ -329,11 +395,23 @@ Dependencies are pinned in `requirements.txt`.
 - **`SiteContact`** — a single admin-editable record (photo, personal
   intro, phone, email, enquiry recipient, coverage radius, service-area
   town list, response-time line, social links). The page reads it, so the
-  business can change any of it without a code change. A placeholder image
-  stands in until a real photo is uploaded.
-- **Coverage map** — Leaflet + OpenStreetMap (no API key, no billing),
-  centred on Chelmsford town centre with a shaded circle at the coverage
-  radius and a marker. Leaflet loads from cdnjs; OSM serves the tiles.
+  business can change any of it without a code change. The photo box uses
+  `aspect-ratio` (matching the source image's own proportions) rather than
+  a fixed `max-height`, so the crop stays identical at every screen width
+  instead of framing the photo differently at each breakpoint.
+- **Coverage map** — Leaflet, centred on Chelmsford town centre with a
+  shaded circle at the coverage radius and a marker. Leaflet loads from
+  cdnjs; tiles come from **Geoapify** (free tier, commercial use allowed —
+  see "Map tiles" above) when `GEOAPIFY_API_KEY` is set, or OpenStreetMap's
+  raw tile server otherwise. `data-tile-key` on `#coverage-map` carries the
+  key from the view to `contact.js`, which picks the tile URL + required
+  attribution accordingly — no key needed for local dev, but a live site
+  should have one (raw OSM tiles get rate-limited under real traffic).
+  Beneath the map's note, the full **"what we do" logo badge** (the same
+  image as the tiny footer mark, shown large enough here to actually read —
+  luxury carpets, carpet tiles, laminate, Amtico, screeding, sub floor
+  prep) fills what would otherwise be leftover space next to the shorter
+  intro column on wide screens.
 - **Enquiry form** — name, email, phone, postcode, message. On submit the
   message is **saved as a `ContactEnquiry`** *and* emailed to the business
   (`reply-to` set to the sender). Email failure is swallowed — the enquiry
@@ -477,9 +555,10 @@ Three access tiers, using Django's built-in auth:
   and an "on calendar?" indicator.
 - **The customer portal** is mostly run from the site itself
   (`/bookings/manage/` + each job's page — see the Bookings section), not
-  the admin. The `Job` admin page is still there for `JobPhoto` uploads and
-  bulk edits, with `Payment` / `Invoice` inlines and a **Confirm booking**
-  action mirroring the on-site one. `Job` and `Invoice` can't be hand-added;
+  the admin — work photos included now, though the `Job` admin page still
+  has `JobPhoto` uploads too (handy for bulk edits), with `Payment` /
+  `Invoice` inlines and a **Confirm booking** action mirroring the on-site
+  one. `Job` and `Invoice` can't be hand-added;
   deleting a job clears its photo files from storage.
 - The **Site Administrators** group is (re)built automatically after every
   `migrate`, and manually with `python manage.py sync_roles`. It receives
@@ -718,7 +797,7 @@ J-Flooring-Specialist/
 │   ├── templates/gallery/  # index (grid + filter bar + lightbox markup)
 │   └── static/gallery/     # gallery.css (masonry breakpoints), gallery.js
 ├── bookings/               # bookings landing + AI quote + call-back + portal
-│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, Payment, Invoice, InvoiceLineItem, CardPayment
+│   ├── models.py           # QuoteSettings, FlooringRate, QuoteRequest, CallRequest, Job, JobPhoto, JobMessage, Payment, RefundRequest, Invoice, InvoiceLineItem, CardPayment
 │   ├── quoting.py          # rate card -> Claude -> parsed/validated estimate
 │   ├── coverage.py         # postcode -> distance from Chelmsford (postcodes.io)
 │   ├── calendar_sync.py    # CallRequest -> Google Calendar event (service account)
@@ -835,6 +914,7 @@ development. See `.env.example` for the template.
 | `STRIPE_PUBLISHABLE_KEY` | No | `pk_test_…` / `pk_live_…` from <https://dashboard.stripe.com/apikeys>. Safe for the browser. |
 | `STRIPE_SECRET_KEY` | No | `sk_test_…` / `sk_live_…`. Server only. With this + the publishable key, the portal's "Pay now" buttons appear. |
 | `STRIPE_WEBHOOK_SECRET` | No | `whsec_…` from the webhook endpoint (dashboard, or `stripe listen`). Needed for reliable payment confirmation. |
+| `GEOAPIFY_API_KEY` | No | From <https://www.geoapify.com/> (free tier, commercial use allowed). Powers the Contact page's coverage map tiles; without it, the map falls back to OpenStreetMap's own raw tile server, which isn't meant for a live site's regular traffic. |
 
 If `EMAIL_HOST_USER` and `EMAIL_HOST_PASSWORD` are both set, email is sent
 via SMTP; otherwise it is printed to the `runserver` console.
@@ -968,8 +1048,8 @@ calendar event is a bonus. Review them in **Bookings → Call requests**.
 
 No configuration needed — it works out of the box (`reportlab`, in
 `requirements.txt`, generates the invoice PDFs). Everything below is done
-from **`/bookings/manage/`** and the customer's own project pages — no
-`/admin/` needed except for uploading work photos.
+from **`/bookings/manage/`** and the customer's own project pages,
+work-photo uploads included — no `/admin/` needed.
 
 1. A customer sends a **booking request** from **Book a job** (pasting their
    `JQ####` quote reference, or via the "Book this job" button on their
@@ -1031,8 +1111,11 @@ just pays by bank transfer / cash. To turn card payments on:
 Every attempt is a `CardPayment` row (**Bookings → Card payments**,
 read-only); a successful one shows in the job's **Payments** table, raises
 an invoice in the customer's portal, and emails you — all automatically, so
-you don't touch the manage panel for card payments. Refunds are done from
-the Stripe dashboard.
+you don't touch the manage panel for card payments. **Refunds are handled
+in the portal, not the Stripe dashboard** — see "Refunds" above: whether
+the money went back by bank transfer or you actually process it as a
+Stripe refund, log it the same way, from **Record a payment → kind:
+Refund**.
 
 ---
 
@@ -1047,7 +1130,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **145**, across `core`,
+tests where they add lasting value (currently **197**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -1071,9 +1154,19 @@ hit from the test suite.
   change-page and bulk deletes both remove the row **and** the file, and
   `prune_gallery_media` deletes only files with no database row. (These
   tests use `InMemoryStorage` so nothing is written to Cloudinary.)
-- `core/tests.py` checks an unknown URL renders the custom `404.html`.
+- `core/tests.py` checks an unknown URL renders the custom `404.html`; that
+  the "Your projects" shortcut (nav + home hero) shows only while the
+  signed-in user has a live job — hidden logged out, with no jobs, and once
+  the only job is complete or cancelled; that the "Manage bookings"
+  shortcut (nav + home hero) shows for a superuser and a Site Administrators
+  group member but stays hidden for an ordinary customer or a logged-out
+  visitor; and that the nav's "N refund" pill shows for an admin while a
+  request is open and disappears the moment it's resolved (customers never
+  see it at all).
 - The **`contact` app has a test suite** (`contact/tests.py`): the page
-  renders with the map container, the `SiteContact` singleton always loads
+  renders with the map container, and the map carries no tile key when
+  `GEOAPIFY_API_KEY` is unset but carries it through to `data-tile-key`
+  when it is; the `SiteContact` singleton always loads
   one row, a valid enquiry is saved *and* emailed (with `reply-to` set),
   the honeypot blocks spam, required fields are enforced, and a missing
   recipient still saves the enquiry.
@@ -1113,7 +1206,21 @@ hit from the test suite.
   Site Administrator can confirm a booking (price + date required), record
   the 20% fee (which
   books the job in), start and complete it, record a payment and issue an
-  invoice; a customer POSTing any of those gets a 404. For **Stripe card
+  invoice, and **add a work photo straight from the job's page** (image +
+  caption, no admin needed) — the upload form only renders for staff, a
+  non-image/oversized file is rejected and nothing's saved, and a customer
+  POSTing any of those gets a 404. For **refunds**: recording a payment with
+  kind Refund leaves the agreed price and paid-so-far alone and drops the
+  balance by exactly that amount; a second refund correctly stacks against
+  what's still refundable rather than the original paid total; one bigger
+  than what's left to refund is rejected outright (nothing saved); a
+  customer can request one only after paying something and only one at a
+  time, needs a reason, and a staff member can't request one on their own
+  job; the reason shows in the staff panel banner and clears once resolved;
+  the manage dashboard's badge and the nav's "N refund" pill both reflect
+  the open count and disappear once resolved; an invoice snapshotted with a
+  refund on the books keeps it separate from `total_paid` too, and the PDF
+  still renders fine with one in it. For **Stripe card
   payments** (SDK fully mocked — no real Stripe call from the suite): the
   "Pay now" buttons appear only with keys configured; starting a deposit
   payment creates a `CardPayment` + PaymentIntent and redirects to our
@@ -1124,9 +1231,24 @@ hit from the test suite.
   purpose and remaining balance) and **emails Joseph** — all idempotently
   (webhook fired twice → one invoice, one email); a bad webhook signature is
   a 400; full-balance and part-payment amounts are validated (over-balance
-  rejected); staff and other users get a 404 on the pay routes. (Portal
+  rejected); the part-payment amount box renders hidden by default (only the
+  JS that reveals it shows on page load); a checkout whose balance has
+  shrunk since it was created is refused on both a page load and a submit
+  (409, no charge attempted) and sends the customer back to choose an
+  amount again; an overpayment that still gets through (money already moved
+  via the return page/webhook, so it's recorded either way) is flagged
+  `OVERPAID` in Joseph's email; staff and other users get a 404 on
+  the pay routes. (Portal
   photo tests use `InMemoryStorage`; Stripe email tests use the locmem
-  mailer.)
+  mailer.) For the **job chat**: the "Messages" section is hidden before the
+  deposit's paid, shown with a send form once booked; a customer message is
+  emailed to Joseph and a staff reply is emailed straight to the customer; an
+  empty submission (no text, no photo) is rejected; a photo attaches and
+  renders; a stranger gets a 404 on both viewing and posting; once the job's
+  complete the thread stays read-only (history shown, form gone, posting
+  404s) and a cancelled job with no history shows nothing at all; opening the
+  job as staff marks the customer's messages read, which clears both the
+  manage-dashboard badge and the nav pill.
 - `python manage.py check` (and `check --deploy` before releasing) is run on
   every change.
 - Wider automated coverage of the older apps is still being built out (see
@@ -1172,7 +1294,26 @@ Done end-to-end for every feature so far, most recently:
   "Pay now" / "Make a payment" buttons appear only with keys set, and the
   pay-choice screen's full-vs-part maths. **Confirmed end-to-end against
   real Stripe test mode**: a booking-fee payment and two balance payments,
-  each auto-recording, auto-invoicing and emailing correctly.
+  each auto-recording, auto-invoicing and emailing correctly. Checked the
+  **"Your projects" shortcut** appears in the nav and home hero for a
+  customer with a live job and disappears once it's complete. Checked the
+  **job chat**: posted as the customer and saw the bubble right-aligned;
+  opened as staff, saw the same message left-aligned plus the "1 unread"
+  pill next to the admin's name and a "1 new message" badge on
+  `/bookings/manage/`; replied, and watched both clear immediately. Checked
+  **"Manage bookings"** appears in the nav and home hero for an admin only,
+  and the **portal photo upload**: staff-only form on the job page, "No
+  photos yet" before the first one. Checked **refunds** end-to-end: a
+  customer with a paid part-payment requested one with a reason, saw the
+  confirmation message; as staff, saw the red "Refund requested" banner
+  with their reason, the "1 refund request" badge on the manage dashboard
+  and the nav pill; recorded a £50 refund (kind: Refund) on a £2000 job
+  with £1000 paid and saw "£50.00 refund recorded - outstanding balance is
+  now £950.00" — Agreed price and Paid so far both untouched at £2000 /
+  £1000, a new **"Refunded −£50.00"** line on the Costs card, the Payments
+  table showing it as `-£50.00` in red, and the final invoice PDF
+  downloading cleanly with it on the books; clicked **Mark resolved** and
+  confirmed the banner, badge and pill all cleared.
 - Reviews: post a review, see the "awaiting approval" message, confirm it is
   not visible, approve it in the admin, confirm it appears on `/reviews/` and
   the home strip; edit an own review and confirm it drops back to pending;
@@ -1181,7 +1322,14 @@ Done end-to-end for every feature so far, most recently:
 - Contact: submit the enquiry form and confirm the thank-you message, the
   enquiry in the admin, and (with a recipient set) the email; check the
   Leaflet coverage map draws the radius circle; confirm the page still
-  renders cleanly with no `SiteContact` details filled in.
+  renders cleanly with no `SiteContact` details filled in. Checked the
+  **photo crop** holds identical at mobile, tablet-boundary and desktop
+  widths (numerically, via the rendered box's aspect ratio), and the **"what
+  we do" logo badge** below the map — legible and blending cleanly onto the
+  white card (its transparent padding, not a solid background, confirmed by
+  sampling pixels) at both mobile (full width, stacked) and desktop
+  (fills the gap next to the taller intro column) — before and after
+  confirmed via the same numeric box-measurement approach as the photo fix.
 - Accounts: registration, login by username *and* by email, logout,
   password-reset including real SMTP delivery, email verification, and the
   profile / avatar-upload flow.
@@ -1265,10 +1413,10 @@ shared code.
       the lightbox, "load more" if the library gets large
 - [x] Custom 404 page
 - [ ] Custom 403 / 500 pages (reuse `error.css`)
-- [x] Contact us page — admin-managed details, Leaflet coverage map,
-      enquiry form (saved + emailed, honeypot spam guard)
-- [ ] Contact follow-ups: real photo, rate-limit the form, auto-reply to
-      the sender
+- [x] Contact us page — admin-managed details, real photo, Leaflet
+      coverage map (Geoapify tiles, commercial-use free tier), enquiry
+      form (saved + emailed, honeypot spam guard)
+- [ ] Contact follow-ups: rate-limit the form, auto-reply to the sender
 - [ ] Add the Anthropic API key + the Google Calendar service account to
       switch the two bookings integrations live
 - [x] Bookings — AI-assisted free quote (rate card in the admin, Claude
@@ -1280,15 +1428,20 @@ shared code.
 - [x] Bookings — customer project portal ("Your projects"): book a job,
       staff confirms price + start date, job status / work photos / agreed
       price / payments / outstanding balance, downloadable PDF invoices,
-      staff access to any customer's portal
+      staff access to any customer's portal, a nav/home shortcut while a job
+      is live, a customer<->staff chat thread once it's booked (with an
+      unread-messages pill for admins), an admin-only "Manage bookings"
+      nav/home shortcut, work-photo uploads straight from the job's
+      page (no admin needed), and refund requests (reason only, discussed
+      on chat) with a matching "Record a payment" refund kind, a manage
+      dashboard badge and a nav pill for admins
 - [x] Bookings — Stripe card payments: branded checkout (Stripe Elements),
       pay the booking fee and the balance (full or part-payments), webhook +
       return-page confirmation, `CardPayment` tracking. On success: ledger
       row + job advance + auto-invoice + owner email, all idempotent. Test
       mode wired up; swap to live keys when ready.
 - [ ] Payments follow-ups: a reconcile command for anything paid while a
-      webhook was down; an in-portal refund view; attach the invoice PDF to
-      the owner's payment email
+      webhook was down; attach the invoice PDF to the owner's payment email
 - [ ] Rewards scheme
 - [ ] **Authenticate a sending domain** (SPF / DKIM / DMARC) for reliable
       deliverability — password reset currently sends via Gmail SMTP from a

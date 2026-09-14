@@ -28,6 +28,9 @@
                 {% if has_active_job %}
                     <a class="btn btn--primary" href="{% url 'bookings:projects' %}">Your projects</a>
                 {% endif %}
+                {% if user.is_site_admin %}
+                    <a class="btn btn--primary" href="{% url 'bookings:manage' %}">Manage bookings</a>
+                {% endif %}
                 <a class="btn btn--primary" href="{% url 'bookings:index' %}">Book a visit</a>
                 <a class="btn btn--ghost btn--on-dark" href="{% url 'gallery:index' %}">See our work</a>
                 <a class="btn btn--ghost btn--on-dark" href="{% url 'contact:index' %}">Contact us</a>

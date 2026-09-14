@@ -1,0 +1,9 @@
+{{ sender_name }} replied on your job.
+
+JOB: {{ job.reference }} - {{ job.title }}
+{% if message.body %}
+"{{ message.body }}"
+{% endif %}{% if message.photo %}
+A photo was attached - view it in your project portal.
+{% endif %}
+{{ url }}

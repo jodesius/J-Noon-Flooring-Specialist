@@ -186,7 +186,8 @@ def render_invoice_pdf(invoice):
 
     subtotal = sum((li.amount for li in line_items), Decimal("0.00"))
     total_paid = invoice.total_paid or Decimal("0.00")
-    balance = subtotal - total_paid
+    total_refunded = invoice.total_refunded or Decimal("0.00")
+    balance = subtotal - total_paid - total_refunded
 
     rows = [[Paragraph("<b>Description</b>", cell), Paragraph("<b>Amount</b>", cell_r)]]
     for li in line_items:
@@ -197,10 +198,15 @@ def render_invoice_pdf(invoice):
     rows.append([Paragraph("<b>Subtotal</b>", cell),
                  Paragraph("<b>%s</b>" % _money(subtotal), cell_r)])
 
+    # A refund comes off the balance the same way a payment does (it's
+    # treated like store credit, not money that's still owed back), so
+    # every row here is a deduction from the subtotal.
     for pay in invoice.payments_snapshot:
         amount = Decimal(str(pay.get("amount", "0")))
-        desc = "%s received %s" % (pay.get("label", "Payment"),
-                                   _fmt_date(pay.get("date")))
+        is_refund = pay.get("kind") == "refund"
+        verb = "issued" if is_refund else "received"
+        desc = "%s %s %s" % (pay.get("label", "Payment"), verb,
+                             _fmt_date(pay.get("date")))
         method = pay.get("method")
         if method:
             desc += " (%s)" % method

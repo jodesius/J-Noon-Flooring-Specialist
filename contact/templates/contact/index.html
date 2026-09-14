@@ -21,7 +21,7 @@
     <div class="contact-top">
         {# ----- Left: photo + details ----- #}
         <div class="contact-card contact-details">
-            <img class="contact-details__photo" src="{{ contact.photo_url }}"
+            <img class="contact-details__photo" src="https://res.cloudinary.com/ddmslr9na/image/upload/v1789410620/ceo-image_mwhzrw.webp"
                  alt="Joseph, J-Noon Flooring Specialist" loading="lazy">
 
             {% if contact.intro %}
@@ -68,11 +68,16 @@
         {# ----- Right: coverage map ----- #}
         <div class="contact-card contact-map-card">
             <div id="coverage-map" class="contact-map"
-                 data-radius="{{ contact.radius_miles }}"></div>
+                 data-radius="{{ contact.radius_miles }}"
+                 data-tile-key="{{ geoapify_key }}"></div>
             <p class="contact-map-card__note">
                 The shaded circle is roughly our {{ contact.radius_miles }}-mile coverage
                 from Chelmsford town centre. Just outside it? Ask anyway.
             </p>
+            <img class="contact-map-card__logo"
+                 src="https://res.cloudinary.com/ddmslr9na/image/upload/f_auto,q_auto,w_700/v1788896276/ChatGPT_Image_Sep_8_2026_08_34_05_PM-_ycy2tz.webp"
+                 alt="J-Noon Flooring Specialist - luxury carpets, carpet tiles, laminate, Amtico, screeding, sub floor prep"
+                 loading="lazy">
         </div>
     </div>
 

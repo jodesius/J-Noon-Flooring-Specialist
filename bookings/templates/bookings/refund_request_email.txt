@@ -1,0 +1,12 @@
+{{ job.contact_name|default:job.user.get_username }} has asked for a refund.
+
+JOB:       {{ job.reference }} - {{ job.title }}
+PAID SO FAR: £{{ job.total_paid|floatformat:2 }}
+
+THEIR REASON:
+{{ refund_request.reason }}
+
+Discuss it with them on the job's chat thread, then record any refund from
+"Record a payment" (kind: Refund) and mark the request resolved.
+
+{{ url }}

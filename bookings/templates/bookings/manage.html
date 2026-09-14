@@ -15,6 +15,8 @@
         <h1>Manage bookings</h1>
         <p>Every customer booking.
             {% if needs_action %}<strong>{{ needs_action }}</strong> waiting on you.{% endif %}
+            {% if unread_messages %}<strong>{{ unread_messages }}</strong> unread message{{ unread_messages|pluralize }}.{% endif %}
+            {% if open_refund_requests %}<strong>{{ open_refund_requests }}</strong> open refund request{{ open_refund_requests|pluralize }}.{% endif %}
         </p>
     </header>
 
@@ -36,6 +38,12 @@
                     <span class="job-card__ref">{{ job.reference }}</span>
                     <span class="job-card__title">{{ job.title }}</span>
                     <span class="job-status job-status--{{ job.status }}">{{ job.get_status_display }}</span>
+                    {% if job.unread_message_count %}
+                        <span class="job-card__unread">{{ job.unread_message_count }} new message{{ job.unread_message_count|pluralize }}</span>
+                    {% endif %}
+                    {% if job.open_refund_count %}
+                        <span class="job-card__unread">{{ job.open_refund_count }} refund request{{ job.open_refund_count|pluralize }}</span>
+                    {% endif %}
                     <span class="job-card__meta">
                         {{ job.contact_name|default:job.user.get_username }}
                         {% if job.agreed_price %} &middot; &pound;{{ job.agreed_price|floatformat:0 }}{% endif %}

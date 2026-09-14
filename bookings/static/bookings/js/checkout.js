@@ -45,17 +45,12 @@
         errorBox.scrollIntoView({ block: "center", behavior: "smooth" });
     }
 
-    // Warn on an accidental refresh/close while the payment is in flight -
-    // closing now would leave it stuck "processing" with no record client-side
-    // (the webhook / return page still catch it, but better to avoid it).
-    function warnBeforeUnload(event) {
-        event.preventDefault();
-        event.returnValue = "";
-    }
-
     // One switch for every "payment in progress" affordance: the full-screen
-    // overlay (same one the quote page uses), the button's own spinner, and
-    // the browser's "are you sure you want to leave" prompt.
+    // overlay (same one the quote page uses) and the button's own spinner.
+    // No browser beforeunload prompt - its wording is fixed by the browser
+    // (can't be customised) and reads like "cancel the payment?" to a
+    // customer who doesn't know we've gone to Stripe. The overlay's own
+    // "please don't close or refresh" copy does that job instead.
     function setBusy(busy) {
         submitting = busy;
         button.disabled = busy;
@@ -64,11 +59,6 @@
         if (overlay) {
             overlay.classList.toggle("is-active", busy);
             document.body.style.overflow = busy ? "hidden" : "";
-        }
-        if (busy) {
-            window.addEventListener("beforeunload", warnBeforeUnload);
-        } else {
-            window.removeEventListener("beforeunload", warnBeforeUnload);
         }
     }
 

@@ -32,6 +32,9 @@
                         {% if has_active_job and current != "bookings:projects" %}
                             <a class="menu__link" href="{% url 'bookings:projects' %}">Your projects</a>
                         {% endif %}
+                        {% if user.is_site_admin and current != "bookings:manage" %}
+                            <a class="menu__link" href="{% url 'bookings:manage' %}">Manage bookings</a>
+                        {% endif %}
                         {% if current != "contact:index" %}
                             <a class="menu__link" href="{% url 'contact:index' %}">Contact us</a>
                         {% endif %}
@@ -65,6 +68,18 @@
 
         <div class="header-col header-col--right">
             {% if user.is_authenticated %}
+                {% if open_refund_count %}
+                    <a class="nav-alert" href="{% url 'bookings:manage' %}"
+                       title="{{ open_refund_count }} refund request{{ open_refund_count|pluralize }}">
+                        {{ open_refund_count }} refund{{ open_refund_count|pluralize }}
+                    </a>
+                {% endif %}
+                {% if unread_message_count %}
+                    <a class="nav-alert" href="{% url 'bookings:manage' %}"
+                       title="{{ unread_message_count }} unread message{{ unread_message_count|pluralize }}">
+                        {{ unread_message_count }} unread
+                    </a>
+                {% endif %}
                 <a class="user-badge user-badge--link" href="{% url 'accounts:profile' %}"
                    title="Your profile">
                     {% include "core/_avatar.html" %}

@@ -301,3 +301,14 @@ JOB_REQUEST_DAILY_LIMIT = int(os.environ.get("JOB_REQUEST_DAILY_LIMIT", "3"))
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+
+# Geoapify (contact page coverage map tiles) - https://www.geoapify.com/
+# Free tier allows commercial use (3,000 requests/day), unlike most other
+# tile providers' free tiers. Safe for the browser - it only permits tile
+# requests, not any account-level action.
+# With no key set, the map falls back to OpenStreetMap's own raw tile
+# server - fine for occasional local dev, but not meant for a live site's
+# regular traffic (their usage policy blocks anything that looks like
+# automated/heavy use).
+GEOAPIFY_API_KEY = os.environ.get("GEOAPIFY_API_KEY", "")
