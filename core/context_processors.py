@@ -1,4 +1,7 @@
 from bookings.models import Job, JobMessage, RefundRequest
+from contact.models import SiteContact
+
+from .structured_data import local_business_jsonld
 
 # Statuses that still count as a "live" project for the nav/home shortcut -
 # once a job is complete or cancelled the shortcut goes away again.
@@ -39,4 +42,15 @@ def active_job(request):
         "has_active_job": has_active_job,
         "unread_message_count": unread_message_count,
         "open_refund_count": open_refund_count,
+    }
+
+
+def site_contact(request):
+    """The business's contact details, site-wide - powers the LocalBusiness
+    structured data in the page <head> (phone, email, coverage area), which
+    needs to be available on every page, not just the Contact us one."""
+    contact = SiteContact.load()
+    return {
+        "site_contact": contact,
+        "local_business_jsonld": local_business_jsonld(request, contact),
     }

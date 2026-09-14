@@ -12,3 +12,17 @@ def home(request):
         .select_related("author")[:HOME_REVIEW_COUNT]
     )
     return render(request, "core/home.html", {"reviews": reviews})
+
+
+def robots_txt(request):
+    """Tells crawlers which parts of the site are worth indexing - the
+    marketing pages, not the customer portal, checkout or admin. The
+    per-page `noindex` meta tags are the real enforcement (a crawler that
+    ignores robots.txt still won't index a noindex page); this just saves
+    well-behaved ones the trip."""
+    return render(
+        request,
+        "robots.txt",
+        {"sitemap_url": request.build_absolute_uri("/sitemap.xml")},
+        content_type="text/plain",
+    )

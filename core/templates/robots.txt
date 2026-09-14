@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /accounts/
+Disallow: /bookings/manage/
+Disallow: /bookings/projects/
+Disallow: /bookings/quote/
+Disallow: /bookings/call/
+Disallow: /bookings/book/
+Disallow: /bookings/pay/
+Disallow: /reviews/new/
+
+Sitemap: {{ sitemap_url }}

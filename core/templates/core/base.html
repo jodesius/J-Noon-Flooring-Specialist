@@ -6,6 +6,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}J-Noon Flooring Specialist{% endblock %}</title>
 
+    {% comment %}
+    SEO: description, keywords, author, indexing, canonical ----
+    Note for future edits: a Django block tag's name can only appear
+    once per template (a second use is a TemplateSyntaxError) - that's
+    why og_title/og_description are their own blocks below rather than
+    reusing title/meta_description a second time.
+    {% endcomment %}
+    <meta name="description" content="{% block meta_description %}J-Noon Flooring Specialist - flooring fitted to last in Chelmsford, Essex. LVT, carpet, laminate, Amtico, vinyl, screeding and floor prep within a 25-mile radius.{% endblock %}">
+    <meta name="keywords" content="flooring Chelmsford, floor coverings, floor prep, Essex flooring, LVT flooring, carpet fitting, traditional carpet, vinyl flooring, laminate flooring, Amtico flooring, screeding, subfloor preparation, flooring specialist Chelmsford">
+    <meta name="author" content="Joseph, J-Noon Flooring Specialist">
+    <!-- Site developed by jodesius -->
+    <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
+    <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">
+
+    {# ---- Open Graph / Twitter card ---- #}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="J-Noon Flooring Specialist">
+    <meta property="og:locale" content="en_GB">
+    <meta property="og:url" content="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">
+    <meta property="og:title" content="{% block og_title %}J-Noon Flooring Specialist{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}J-Noon Flooring Specialist - flooring fitted to last in Chelmsford, Essex. LVT, carpet, laminate, Amtico, vinyl, screeding and floor prep within a 25-mile radius.{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}https://res.cloudinary.com/ddmslr9na/image/upload/f_png,q_auto,w_512/v1788910923/jn-logo-initials_def2ao.webp{% endblock %}">
+    {% comment %}
+    Twitter/X reads the og: tags above as a fallback when its own aren't
+    present, so only the card style needs setting here.
+    {% endcomment %}
+    <meta name="twitter:card" content="summary_large_image">
+
+    <meta name="theme-color" content="#3b2a21">
+
+    {% comment %}
+    Favicon - placeholder using the existing "JN" mark until real
+    favicon files are supplied; swap the URLs below when they arrive
+    {% endcomment %}
+    <link rel="icon" type="image/png" sizes="32x32" href="https://res.cloudinary.com/ddmslr9na/image/upload/f_png,q_auto,w_32,h_32,c_fit/v1788910923/jn-logo-initials_def2ao.webp">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://res.cloudinary.com/ddmslr9na/image/upload/f_png,q_auto,w_16,h_16,c_fit/v1788910923/jn-logo-initials_def2ao.webp">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://res.cloudinary.com/ddmslr9na/image/upload/f_png,q_auto,w_180,h_180,c_fit/v1788910923/jn-logo-initials_def2ao.webp">
+
+    {# ---- Structured data: tells search engines what the business is, where it works and how to reach it ---- #}
+    <script type="application/ld+json">{{ local_business_jsonld|safe }}</script>
+
     <link rel="stylesheet" href="{% static 'core/css/base.css' %}">
     {% block extra_css %}{% endblock %}
 </head>

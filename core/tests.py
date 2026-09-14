@@ -1,3 +1,7 @@
+import json
+import re
+from xml.etree import ElementTree
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -159,3 +163,118 @@ class CustomErrorPageTests(TestCase):
         self.assertTemplateUsed(resp, "404.html")
         self.assertContains(resp, "404 URL error", status_code=404)
         self.assertContains(resp, "Back to the home page", status_code=404)
+
+
+def _meta_content(html, name=None, prop=None):
+    """Pull a meta tag's content attribute out of rendered HTML - either
+    <meta name="..."> or <meta property="..."> (Open Graph uses property=)."""
+    attr, value = ("name", name) if name else ("property", prop)
+    m = re.search(
+        rf'<meta {attr}="{re.escape(value)}" content="([^"]*)"', html
+    )
+    return m.group(1) if m else None
+
+
+class SeoBoilerplateTests(TestCase):
+    """The SEO/semantic head boilerplate added ahead of deployment: meta
+    description, robots, canonical, Open Graph, favicons and the
+    LocalBusiness JSON-LD block. Covers a public page (default index/follow)
+    and a private one (noindex/nofollow override) so both branches of the
+    {% block robots %} default are exercised.
+    """
+
+    def test_public_page_has_default_index_follow_and_description(self):
+        resp = self.client.get(reverse("core:home"))
+        html = resp.content.decode()
+
+        self.assertEqual(_meta_content(html, name="robots"), "index, follow")
+        self.assertTrue(_meta_content(html, name="description"))
+        self.assertTrue(_meta_content(html, name="author"))
+
+    def test_public_page_has_open_graph_and_canonical(self):
+        resp = self.client.get(reverse("core:home"))
+        html = resp.content.decode()
+
+        self.assertTrue(_meta_content(html, prop="og:title"))
+        self.assertTrue(_meta_content(html, prop="og:description"))
+        self.assertEqual(_meta_content(html, prop="og:type"), "website")
+        self.assertIn('rel="canonical"', html)
+        self.assertIn(reverse("core:home"), html)
+
+    def test_private_page_is_noindex_nofollow(self):
+        resp = self.client.get(reverse("accounts:login"))
+        html = resp.content.decode()
+
+        self.assertEqual(_meta_content(html, name="robots"), "noindex, nofollow")
+
+    def test_favicon_links_present(self):
+        resp = self.client.get(reverse("core:home"))
+        html = resp.content.decode()
+
+        self.assertIn('rel="icon"', html)
+        self.assertIn('rel="apple-touch-icon"', html)
+
+    def test_json_ld_is_valid_and_reflects_site_contact(self):
+        from contact.models import SiteContact
+
+        contact = SiteContact.load()
+        contact.phone = "01234 567890"
+        contact.email = "info@example.com"
+        contact.service_area = "Chelmsford and a 25-mile radius of Essex"
+        contact.save()
+
+        resp = self.client.get(reverse("core:home"))
+        html = resp.content.decode()
+
+        m = re.search(
+            r'<script type="application/ld\+json">(.*?)</script>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(m)
+        data = json.loads(m.group(1))
+
+        self.assertEqual(data["@type"], "HomeAndConstructionBusiness")
+        self.assertEqual(data["name"], "J-Noon Flooring Specialist")
+        self.assertEqual(data["telephone"], contact.phone)
+        self.assertEqual(data["email"], contact.email)
+        self.assertEqual(data["areaServed"], contact.service_area)
+        self.assertIn("geo", data)
+        self.assertNotIn("streetAddress", data["address"])
+
+
+class RobotsTxtTests(TestCase):
+    def test_robots_txt_is_served_as_plain_text(self):
+        resp = self.client.get("/robots.txt")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "text/plain")
+
+    def test_robots_txt_disallows_private_areas_and_names_sitemap(self):
+        resp = self.client.get("/robots.txt")
+        body = resp.content.decode()
+
+        self.assertIn("Disallow: /admin/", body)
+        self.assertIn("Disallow: /accounts/", body)
+        self.assertIn("Disallow: /bookings/manage/", body)
+        self.assertRegex(body, r"Sitemap: https?://\S+/sitemap\.xml")
+
+
+class SitemapTests(TestCase):
+    def test_sitemap_lists_the_public_pages(self):
+        resp = self.client.get("/sitemap.xml")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/xml")
+
+        root = ElementTree.fromstring(resp.content)
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        locs = {el.text for el in root.findall("sm:url/sm:loc", ns)}
+
+        for name in ("core:home", "bookings:index", "gallery:index",
+                     "reviews:list", "contact:index"):
+            path = reverse(name)
+            self.assertTrue(
+                any(loc.endswith(path) for loc in locs),
+                f"{path} not found in sitemap: {locs}",
+            )

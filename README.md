@@ -23,6 +23,7 @@ firms with only branding, content and configuration changes.
 - [Media storage](#media-storage)
 - [Turning on the bookings features](#turning-on-the-bookings-features)
 - [Running the test suite](#running-the-test-suite)
+- [SEO & metadata](#seo--metadata)
 - [Production deployment](#production-deployment)
 - [Re-using this design for another firm](#re-using-this-design-for-another-firm)
 - [Roadmap](#roadmap)
@@ -757,11 +758,15 @@ J-Flooring-Specialist/
 │   ├── settings.py
 │   └── urls.py
 ├── core/                   # shared base template, home page, site chrome
-│   ├── templates/core/     # base.html, _avatar.html, home.html
+│   ├── templates/core/     # base.html (SEO/OG/JSON-LD head boilerplate), _avatar.html, home.html
 │   ├── templates/404.html  # custom "page not found" page
+│   ├── templates/robots.txt
 │   ├── static/core/        # base.css / base.js, home.css / home.js, error.css
-│   ├── tests.py            # custom 404 renders for unknown URLs
-│   └── views.py            # home view (feeds the recent-reviews strip)
+│   ├── structured_data.py  # LocalBusiness JSON-LD, built from SiteContact
+│   ├── sitemaps.py         # django.contrib.sitemaps for the 5 public pages
+│   ├── context_processors.py # active_job, site_contact (+ its JSON-LD)
+│   ├── tests.py            # custom 404, SEO boilerplate, robots.txt, sitemap.xml
+│   └── views.py            # home view, robots_txt
 ├── accounts/               # user model, auth, profiles, roles
 │   ├── models.py           # User, Profile
 │   ├── backends.py         # username-or-email authentication
@@ -1130,7 +1135,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **197**, across `core`,
+tests where they add lasting value (currently **205**, across `core`,
 `bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
 pass in the browser for the full user journey and the look of each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
@@ -1162,7 +1167,11 @@ hit from the test suite.
   group member but stays hidden for an ordinary customer or a logged-out
   visitor; and that the nav's "N refund" pill shows for an admin while a
   request is open and disappears the moment it's resolved (customers never
-  see it at all).
+  see it at all); and the [SEO & metadata](#seo--metadata) boilerplate —
+  `index, follow` by default on a public page and `noindex, nofollow` on a
+  private one, canonical/Open Graph tags present, a parseable JSON-LD block
+  reflecting `SiteContact`, favicon links present, and that `robots.txt` /
+  `sitemap.xml` return the expected content.
 - The **`contact` app has a test suite** (`contact/tests.py`): the page
   renders with the map container, and the map carries no tile key when
   `GEOAPIFY_API_KEY` is unset but carries it through to `data-tile-key`
@@ -1352,6 +1361,43 @@ python manage.py check --deploy
 
 ---
 
+## SEO & metadata
+
+Every page renders a shared head boilerplate from `core/templates/core/base.html`:
+meta description, meta keywords, meta author, a `robots` tag, a canonical
+link, Open Graph + Twitter Card tags, a theme colour, favicon links, and a
+`HomeAndConstructionBusiness` JSON-LD block (schema.org structured data) built
+from the live `SiteContact` admin record by `core/structured_data.py`.
+
+- **Per-page overrides** — public marketing pages (`core:home`,
+  `bookings:index`, `gallery:index`, `reviews:list`, `contact:index`)
+  override `{% block meta_description %}`, `{% block og_title %}` and
+  `{% block og_description %}` with tailored, keyword-relevant copy. Every
+  other page (accounts, the customer portal, checkout, quote flows, the
+  review form, the 404 page) overrides `{% block robots %}` to
+  `noindex, nofollow` so it can't be indexed. The default (no override) is
+  `index, follow`.
+- **`robots.txt`** (`core/views.py::robots_txt`, `core/templates/robots.txt`)
+  is served by a view, not a static file, so its `Sitemap:` line can be built
+  from `request.build_absolute_uri()` without hardcoding a domain. It
+  disallows the same private paths the per-page `noindex` tags cover.
+- **`sitemap.xml`** (`core/sitemaps.py`, wired in `config/urls.py`) lists the
+  5 public pages via `django.contrib.sitemaps`.
+- **Favicons** are currently **placeholders** — the existing "JN" monogram
+  mark, resized via Cloudinary URL transforms, wired into the `<link
+  rel="icon">` / `<link rel="apple-touch-icon">` tags in
+  `core/templates/core/base.html`. Swap those four URLs for real favicon
+  assets when they're supplied (see the Roadmap).
+- Canonical and Open Graph URLs are built per-request from `request.scheme` /
+  `request.get_host` / `request.path` (not hardcoded), since production tests
+  under a not-yet-decided domain.
+- Covered by `core/tests.py` (`SeoBoilerplateTests`, `RobotsTxtTests`,
+  `SitemapTests`) — asserts the index/noindex split, canonical/OG tags, a
+  parseable JSON-LD block reflecting `SiteContact`, and that `robots.txt` /
+  `sitemap.xml` return the expected content.
+
+---
+
 ## Production deployment
 
 1. Set environment variables on the host: `DJANGO_SECRET_KEY` (a fresh one),
@@ -1402,6 +1448,9 @@ shared code.
 
 - [ ] Replace the default review photo placeholder (`DEFAULT_REVIEW_IMAGE`
       in `reviews/models.py`) — shown on postcards with no uploaded image
+- [ ] Swap the placeholder favicon URLs in `core/templates/core/base.html`
+      (32x32, 16x16, apple-touch-icon 180x180) for real favicon assets once
+      supplied — see [SEO & metadata](#seo--metadata)
 - [x] Home page — hero (real work photo), about, recent-reviews strip,
       "how we work" (three service options), "what we do" (seven systems)
 - [ ] Add photos to the "what we do" cards (currently text only)
