@@ -1,4 +1,5 @@
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -67,6 +68,7 @@ class SiteContactModelTests(TestCase):
 @LOCMEM_MAIL
 class EnquiryFormSubmissionTests(TestCase):
     def setUp(self):
+        cache.clear()  # each test starts with a clean submission-throttle slate
         c = SiteContact.load()
         c.email = "joseph@example.com"
         c.save()
@@ -114,3 +116,40 @@ class EnquiryFormSubmissionTests(TestCase):
         self.assertRedirects(resp, reverse("contact:index"))
         self.assertEqual(ContactEnquiry.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 0)
+
+
+@LOCMEM_MAIL
+class EnquiryThrottleTests(TestCase):
+    """A scripted client can leave the honeypot blank, so it alone doesn't
+    stop a flood of submissions - found missing (no rate limiting at all)
+    during the pre-deploy security review."""
+
+    def setUp(self):
+        cache.clear()
+
+    def test_blocks_after_max_submissions_per_window(self):
+        for i in range(5):
+            resp = self.client.post(
+                reverse("contact:index"), valid_payload(email=f"sam{i}@example.com")
+            )
+            self.assertRedirects(resp, reverse("contact:index"))
+
+        resp = self.client.post(
+            reverse("contact:index"), valid_payload(email="sam-over-limit@example.com"),
+            follow=True,
+        )
+        self.assertContains(resp, "sent a few messages already")
+        self.assertEqual(ContactEnquiry.objects.count(), 5)
+
+    def test_different_ip_is_not_affected(self):
+        for i in range(5):
+            self.client.post(
+                reverse("contact:index"), valid_payload(email=f"sam{i}@example.com")
+            )
+
+        resp = self.client.post(
+            reverse("contact:index"), valid_payload(email="other-ip@example.com"),
+            REMOTE_ADDR="10.0.0.5",
+        )
+        self.assertRedirects(resp, reverse("contact:index"))
+        self.assertEqual(ContactEnquiry.objects.count(), 6)

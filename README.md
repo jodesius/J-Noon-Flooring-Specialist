@@ -578,7 +578,16 @@ Three access tiers, using Django's built-in auth:
 ## Security
 
 Security is a primary design goal of this project. What is implemented
-today, grouped by concern:
+today, grouped by concern.
+
+A full pre-launch pentest (code review + live exploit attempts against a
+running instance) was carried out covering SQL injection, CSRF, IDOR,
+account enumeration, brute force, account takeover, and admin/privilege
+escalation. Two real issues were found and fixed (an open redirect on login,
+and missing rate limiting on login + the contact form — both covered below);
+everything else came back clean. See [Running the test
+suite](#running-the-test-suite) for the automated regression tests that
+lock those fixes in.
 
 ### Secrets and configuration
 
@@ -606,6 +615,18 @@ today, grouped by concern:
   tokens (`SECRET_KEY`-derived). A verification token's hash includes the
   address and the verified flag, so it is single-use and dies if the email
   changes.
+- Login's `?next=` redirect target is validated with Django's
+  `url_has_allowed_host_and_scheme` before being followed — an unchecked
+  `next` is an open-redirect / phishing vector (found in the pre-launch
+  pentest): `?next=https://evil.example` would otherwise send someone to an
+  attacker's page straight after a real, successful login.
+- **Login brute-force protection**: 5 wrong attempts against an account, or
+  from one IP, within 15 minutes locks out further attempts for the rest of
+  that window (a correct login clears the counter). Keyed on both the
+  account and the IP, so an attacker can't dodge it either by spraying one
+  account from many IPs or many accounts from one IP. Cache-based
+  (`django.core.cache`, no extra dependency) — see
+  `accounts/views.py`.
 
 ### Passwords
 
@@ -650,6 +671,13 @@ today, grouped by concern:
   Administrators group holds no `auth`-app permissions, and non-superusers
   never see `is_superuser` / `groups` / `user_permissions` and cannot act
   on superuser accounts (see [Admin & roles](#admin--roles)).
+- The pre-launch pentest also actively tried IDOR against every
+  cross-account surface in `bookings` (another customer's job, chat,
+  refund request, card payment/checkout, invoice PDF, AI quote) and the
+  staff `/bookings/manage/` dashboard — every attempt was correctly
+  blocked (404, not 403, so a stranger can't even tell the resource
+  exists). See [Running the test suite](#running-the-test-suite) for the
+  automated `bookings` coverage of the same ground.
 
 ### User-generated content / abuse prevention
 
@@ -686,7 +714,11 @@ today, grouped by concern:
 - **Contact form spam**: a honeypot field (present in the DOM, hidden from
   people with CSS) — a filled-in honeypot fails validation, so the message
   is never saved or emailed. Enquiry text is length-capped and rendered
-  through auto-escaping; the notification email is plain text.
+  through auto-escaping; the notification email is plain text. The honeypot
+  only stops naive bots, not a scripted client that leaves it blank, so
+  there's also a **rate limit**: 5 submissions per IP per hour (found
+  missing in the pre-launch pentest — a scripted client could otherwise
+  flood the business inbox and the database with unlimited submissions).
 - **AI quote engine**: the quote form is `@login_required`, honeypot-guarded
   and rate-limited per user per day. The customer's free text reaches Claude
   as **data, not instructions** (the system prompt states this explicitly);
@@ -745,6 +777,14 @@ the site is public — see [Production deployment](#production-deployment):
 - Move the admin off the default `/admin/` path
 - Serve `/media/` from a dedicated file store, not Django
 - Shorten `PASSWORD_RESET_TIMEOUT` from the 3-day default if desired
+- Once actually behind Cloudflare: `core/utils.py::client_ip()` (used by the
+  login and contact-form rate limiters) reads `REMOTE_ADDR` directly rather
+  than trusting `X-Forwarded-For` (client-spoofable), which means every
+  visitor will appear to share Cloudflare's own edge IP unless the deployment
+  is configured to trust Cloudflare's real-IP header specifically. Also
+  worth checking whether the deployment runs multiple worker processes — the
+  rate limiters use Django's default in-process cache, which doesn't share
+  counters across workers.
 
 `python manage.py check --deploy` reports on most of these.
 
@@ -765,6 +805,7 @@ J-Flooring-Specialist/
 │   ├── structured_data.py  # LocalBusiness JSON-LD, built from SiteContact
 │   ├── sitemaps.py         # django.contrib.sitemaps for the 5 public pages
 │   ├── context_processors.py # active_job, site_contact (+ its JSON-LD)
+│   ├── utils.py            # client_ip() - shared by the login/contact rate limiters
 │   ├── tests.py            # custom 404, SEO boilerplate, robots.txt, sitemap.xml
 │   └── views.py            # home view, robots_txt
 ├── accounts/               # user model, auth, profiles, roles
@@ -776,7 +817,8 @@ J-Flooring-Specialist/
 │   ├── forms.py            # RegisterForm, LoginForm, ProfileForm
 │   ├── signals.py          # auto-create Profile for new users
 │   ├── management/commands/ # sync_roles
-│   ├── views.py
+│   ├── views.py             # login (open-redirect guard + brute-force lockout), register, profile
+│   ├── tests.py              # login redirect safety + brute-force lockout
 │   ├── migrations/
 │   ├── templates/accounts/ # login, register, logout, profile, reset + verify
 │   └── static/accounts/    # auth.css, profile.css, page JS
@@ -1135,9 +1177,10 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **205**, across `core`,
-`bookings`, `contact`, `reviews` and `gallery`), and a manual end-to-end
-pass in the browser for the full user journey and the look of each page.
+tests where they add lasting value (currently **214**, across `core`,
+`accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
+end-to-end pass in the browser for the full user journey and the look of
+each page.
 Tests that touch the AI or Google Calendar **mock those calls** — no real
 external API is ever
 hit from the test suite.
@@ -1172,13 +1215,23 @@ hit from the test suite.
   private one, canonical/Open Graph tags present, a parseable JSON-LD block
   reflecting `SiteContact`, favicon links present, and that `robots.txt` /
   `sitemap.xml` return the expected content.
+- The **`accounts` app has a test suite** (`accounts/tests.py`), added
+  during the pre-launch pentest: the login `?next=` redirect follows a
+  same-site target but ignores an off-site or protocol-relative one (the
+  open-redirect fix); and the login lockout — 5 wrong attempts against an
+  account (or from one IP) locks out further attempts, a correct login
+  before the threshold still works and clears the counter, a different
+  account on a different IP is unaffected, and an attacker spraying
+  different accounts from one IP still trips the IP-level lockout.
 - The **`contact` app has a test suite** (`contact/tests.py`): the page
   renders with the map container, and the map carries no tile key when
   `GEOAPIFY_API_KEY` is unset but carries it through to `data-tile-key`
   when it is; the `SiteContact` singleton always loads
   one row, a valid enquiry is saved *and* emailed (with `reply-to` set),
   the honeypot blocks spam, required fields are enforced, and a missing
-  recipient still saves the enquiry.
+  recipient still saves the enquiry; and (also from the pentest) the
+  submission rate limit blocks the 6th enquiry from one IP within the hour
+  while a different IP is unaffected.
 - The **`bookings` app has a test suite** (`bookings/tests.py`, AI and
   calendar mocked): the quote page is login-gated and shows "book a call"
   when quoting isn't configured; a valid submission creates a `QuoteRequest`

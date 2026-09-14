@@ -1,19 +1,61 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.http import (
+    url_has_allowed_host_and_scheme, urlsafe_base64_decode, urlsafe_base64_encode,
+)
 from django.views.decorators.http import require_http_methods, require_POST
+
+from core.utils import client_ip
 
 from .forms import LoginForm, ProfileForm, RegisterForm
 from .models import Profile
 from .tokens import email_verification_token
 
 User = get_user_model()
+
+# Login brute-force protection: after this many failed attempts against
+# either the same account or the same IP within the window, further
+# attempts are refused for the rest of the window. Keyed on both so an
+# attacker can't dodge the lockout by spraying many accounts from one IP,
+# or hammering one account from many IPs.
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+
+
+def _login_throttle_keys(request, username):
+    keys = [f"login_fail:ip:{client_ip(request)}"]
+    username = (username or "").strip().lower()
+    if username:
+        keys.append(f"login_fail:user:{username}")
+    return keys
+
+
+def _login_is_locked(request, username):
+    return any(
+        cache.get(key, 0) >= LOGIN_MAX_ATTEMPTS
+        for key in _login_throttle_keys(request, username)
+    )
+
+
+def _login_register_failure(request, username):
+    for key in _login_throttle_keys(request, username):
+        cache.add(key, 0, LOGIN_LOCKOUT_SECONDS)
+        try:
+            cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, LOGIN_LOCKOUT_SECONDS)
+
+
+def _login_clear_failures(request, username):
+    for key in _login_throttle_keys(request, username):
+        cache.delete(key)
 
 
 def _send_verification_email(request, user):
@@ -53,17 +95,40 @@ def register_view(request):
     return render(request, "accounts/register.html", {"form": form})
 
 
+def _safe_next_url(request, next_url):
+    """Only follow `next` if it points back at this site - an unchecked
+    redirect target is an open-redirect / phishing vector (attacker sends a
+    login link with next=https://evil.example, victim logs in for real, then
+    lands on the attacker's page)."""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return next_url
+    return None
+
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("core:home")
 
     if request.method == "POST":
+        username = request.POST.get("username", "")
+
+        if _login_is_locked(request, username):
+            messages.error(
+                request,
+                "Too many failed attempts - please wait 15 minutes and try again.",
+            )
+            return render(request, "accounts/login.html", {"form": LoginForm(request)})
+
         form = LoginForm(request, data=request.POST)
         if form.is_valid():
+            _login_clear_failures(request, username)
             login(request, form.get_user())
             next_url = request.POST.get("next") or request.GET.get("next")
-            return redirect(next_url or "core:home")
+            return redirect(_safe_next_url(request, next_url) or "core:home")
 
+        _login_register_failure(request, username)
         # Generic message (no user enumeration) and blank fields to retry.
         messages.error(request, "Username/email or password is incorrect.")
         return render(request, "accounts/login.html", {"form": LoginForm(request)})
