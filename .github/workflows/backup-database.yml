@@ -1,0 +1,43 @@
+name: Database backup
+
+# Neon's free plan only keeps 6 hours of point-in-time recovery history -
+# this workflow takes its own snapshots every 6 hours and keeps them for 30
+# days, as extra insurance on top of that. Entirely free: a run takes about
+# a minute, well inside GitHub's free Actions minutes and artifact storage.
+#
+# Needs a repository secret called DATABASE_URL (Settings -> Secrets and
+# variables -> Actions -> "New repository secret") set to the same
+# connection string used in the app's own .env. See README.md's
+# "Database backups" section for the full restore steps.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump the database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL secret is not set - see this file's header comment."
+            exit 1
+          fi
+          timestamp="$(date -u +%Y%m%d-%H%M%S)"
+          echo "name=backup-${timestamp}" >> "$GITHUB_ENV"
+          pg_dump "$DATABASE_URL" --format=custom --file="backup-${timestamp}.dump"
+
+      - name: Upload as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.name }}
+          path: ${{ env.name }}.dump
+          retention-days: 30

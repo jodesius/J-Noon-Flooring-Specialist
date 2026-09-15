@@ -1018,6 +1018,45 @@ data, use **Neon** (free managed PostgreSQL):
 Connection pooling and health checks are configured in `settings.py`
 (`conn_max_age=600`, `conn_health_checks=True`).
 
+### Database backups
+
+Neon's own point-in-time recovery is built into the storage layer, but on
+the **free plan it only covers the last 6 hours** of changes (paid plans
+extend this to 7–30 days). Since staying on the free plan is the current
+plan, `.github/workflows/backup-database.yml` adds a second, independent
+safety net: a scheduled GitHub Actions job that takes its own snapshot of
+the database **every 6 hours** and keeps each one for **30 days**, entirely
+within GitHub's free tier (a run takes about a minute; even at 4 runs a
+day that's a small fraction of the 2,000 free Actions minutes/month, and
+the resulting files are far under the 500MB free artifact storage for a
+database this size).
+
+**One-time setup** (do this once, in GitHub's own site — not something run
+from this codebase):
+1. Repo → **Settings → Secrets and variables → Actions → New repository
+   secret**.
+2. Name: `DATABASE_URL`. Value: the same Neon connection string that's in
+   `.env` locally.
+3. That's it — the workflow starts running on its own schedule from the
+   next scheduled tick, or trigger it immediately from the **Actions**
+   tab → "Database backup" → **Run workflow** (that same button lets you
+   force an extra backup any time, e.g. right before a risky change).
+
+**Restoring from a backup**, if it's ever needed:
+1. GitHub repo → **Actions** tab → **Database backup** → pick the run from
+   around the time you want to restore to.
+2. Download its artifact (a `.dump` file) from that run's summary page.
+3. Restore it into a database with:
+   ```bash
+   pg_restore --clean --if-exists --no-owner --dbname="$DATABASE_URL" path/to/backup-20260915-120000.dump
+   ```
+   `--clean --if-exists` drops existing objects first so the restore
+   doesn't collide with what's already there; `--no-owner` avoids errors
+   from role names that may differ between environments. Point
+   `DATABASE_URL` at a **fresh/empty** database if the original Neon
+   project itself was lost, or the same one if this is just rolling back a
+   bad change.
+
 ---
 
 ## Email
