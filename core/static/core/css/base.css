@@ -263,6 +263,20 @@ body {
 }
 .site-footer__text { margin: 0; font-size: 0.85rem; }
 
+.site-footer__legal {
+    display: flex;
+    gap: 0.9rem;
+    font-size: 0.8rem;
+}
+.site-footer__legal a {
+    color: var(--text-muted);
+    text-decoration: underline;
+}
+.site-footer__legal a:hover,
+.site-footer__legal a:focus-visible {
+    color: var(--text-on-wood);
+}
+
 /* ---------- Focus visibility ---------- */
 :focus-visible {
     outline: 3px solid var(--focus-ring);

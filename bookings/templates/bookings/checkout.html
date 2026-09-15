@@ -73,7 +73,10 @@
                 <input type="checkbox" id="authorise" required>
                 <label for="authorise">
                     I authorise J-Noon Flooring Specialist to charge
-                    <strong>&pound;{{ cp.amount|floatformat:2 }}</strong> to my card.
+                    <strong>&pound;{{ cp.amount|floatformat:2 }}</strong> to my card,
+                    under the
+                    <a href="{% url 'core:terms' %}" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+                    (including the cancellation &amp; refund terms).
                 </label>
             </div>
 

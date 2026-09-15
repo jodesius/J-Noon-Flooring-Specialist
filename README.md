@@ -120,6 +120,11 @@ Dependencies are pinned in `requirements.txt`.
   nav menu while the signed-in customer has a live job (booked, not started,
   or underway) — it drops away again once the job's complete or cancelled
   (`core.context_processors.active_job`).
+- **Privacy Policy** and **Terms & Conditions** (`core`) — plain-English
+  pages at `/privacy/` and `/terms/`, linked from the footer on every page,
+  the registration form, the contact form, and the card-checkout
+  authorisation. See [Security](#security) for how consent is recorded.
+
 ### Bookings (`bookings`)
 
 - **`/bookings/`** — landing page. Signed out: a *sign in / register* gate.
@@ -503,10 +508,16 @@ Postcard-style customer reviews with **full CRUD**, gated by admin approval.
 | `/accounts/password-reset/` | Request a reset link by email |
 | `/accounts/reset/<uidb64>/<token>/` | Set a new password from an emailed link |
 | `/accounts/verify-email/<uidb64>/<token>/` | Confirm an email address from an emailed link |
+| `/privacy/` | Privacy Policy (`core`) |
+| `/terms/` | Terms & Conditions (`core`) |
 
 - **Custom user model** (`accounts.User`) with a unique, required email
   address. Usernames are unique **case-insensitively** — nobody can take
   `Bob` if `bob` exists.
+- **Registration requires agreeing to the Terms & Conditions and Privacy
+  Policy** (a required checkbox linking to both) — the exact moment of
+  acceptance is recorded on the account (`User.terms_accepted_at`), not
+  just implied by the checkbox having been ticked.
 - **Show / hide password** toggle on the registration, login and
   set-new-password forms.
 - **Email verification**: a signed, time-limited link is sent at
@@ -762,6 +773,29 @@ lock those fixes in.
 - The Neon PostgreSQL connection string uses `sslmode=require`, so all
   database traffic is encrypted in transit.
 
+### Legal, consent & error monitoring
+
+- **Privacy Policy** (`/privacy/`) and **Terms & Conditions** (`/terms/`)
+  cover what personal data is collected, why, who it's shared with (Stripe,
+  Cloudinary, Google Calendar, Anthropic, Geoapify), and the booking/
+  payment/refund terms. Written to accurately reflect what the codebase
+  actually does — not generic boilerplate — but it's not a substitute for a
+  solicitor's review before fully relying on it, especially the
+  cancellation terms, which are deliberately left flexible ("we'll talk it
+  through with you") rather than asserting specific refund percentages or
+  notice periods that weren't confirmed as actual business policy.
+- **Registration requires agreeing to both**, and the exact acceptance
+  time is recorded on the account (`User.terms_accepted_at`) — a firmer
+  record than a checkbox alone if consent is ever disputed.
+- Both are also linked from the contact form and the card-checkout
+  authorisation, at the points where personal data or payment is actually
+  being taken.
+- **Error monitoring** ([Sentry](https://sentry.io), optional): set
+  `SENTRY_DSN` and unhandled exceptions in production are reported there
+  instead of only surfacing if a customer complains. `send_default_pii` is
+  off — requests here carry genuine customer data that has no reason to
+  leave the app for an error tracker.
+
 ### Production hardening checklist
 
 The following are **not** enabled in the committed settings because
@@ -798,10 +832,10 @@ J-Flooring-Specialist/
 │   ├── settings.py
 │   └── urls.py
 ├── core/                   # shared base template, home page, site chrome
-│   ├── templates/core/     # base.html (SEO/OG/JSON-LD head boilerplate), _avatar.html, home.html
+│   ├── templates/core/     # base.html (SEO/OG/JSON-LD head boilerplate), _avatar.html, home.html, privacy.html, terms.html
 │   ├── templates/404.html  # custom "page not found" page
 │   ├── templates/robots.txt
-│   ├── static/core/        # base.css / base.js, home.css / home.js, error.css
+│   ├── static/core/        # base.css / base.js, home.css / home.js, error.css, legal.css
 │   ├── structured_data.py  # LocalBusiness JSON-LD, built from SiteContact
 │   ├── sitemaps.py         # django.contrib.sitemaps for the 5 public pages
 │   ├── context_processors.py # active_job, site_contact (+ its JSON-LD)
@@ -940,6 +974,7 @@ development. See `.env.example` for the template.
 | `DJANGO_SECRET_KEY` | Yes | Django cryptographic signing key. The app will not start without it. |
 | `DJANGO_DEBUG` | No | `False` before going live. Unset (default) behaves exactly like today — `DEBUG=True`. |
 | `DJANGO_ALLOWED_HOSTS` | No | Comma-separated real domain(s) before going live, e.g. `jnoonflooring.co.uk,www.jnoonflooring.co.uk`. Unset = empty (local dev only). |
+| `SENTRY_DSN` | No | From <https://sentry.io> (free tier). Enables error monitoring — an unhandled exception in production is reported there instead of only ever showing up if a customer complains. Unset = no-op, errors just go to the server logs as before. |
 | `DATABASE_URL` | No | PostgreSQL connection string (Neon). If unset, a local SQLite file is used. |
 | `EMAIL_HOST` | No | SMTP server. Default `smtp.gmail.com`. |
 | `EMAIL_PORT` | No | SMTP port. Default `587` (STARTTLS). |
@@ -1177,7 +1212,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **214**, across `core`,
+tests where they add lasting value (currently **220**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.
@@ -1210,19 +1245,23 @@ hit from the test suite.
   group member but stays hidden for an ordinary customer or a logged-out
   visitor; and that the nav's "N refund" pill shows for an admin while a
   request is open and disappears the moment it's resolved (customers never
-  see it at all); and the [SEO & metadata](#seo--metadata) boilerplate —
+  see it at all); the [SEO & metadata](#seo--metadata) boilerplate —
   `index, follow` by default on a public page and `noindex, nofollow` on a
   private one, canonical/Open Graph tags present, a parseable JSON-LD block
   reflecting `SiteContact`, favicon links present, and that `robots.txt` /
-  `sitemap.xml` return the expected content.
+  `sitemap.xml` return the expected content; and the Privacy Policy / Terms
+  pages both render and are linked from the footer on any page.
 - The **`accounts` app has a test suite** (`accounts/tests.py`), added
   during the pre-launch pentest: the login `?next=` redirect follows a
   same-site target but ignores an off-site or protocol-relative one (the
-  open-redirect fix); and the login lockout — 5 wrong attempts against an
+  open-redirect fix); the login lockout — 5 wrong attempts against an
   account (or from one IP) locks out further attempts, a correct login
   before the threshold still works and clears the counter, a different
   account on a different IP is unaffected, and an attacker spraying
-  different accounts from one IP still trips the IP-level lockout.
+  different accounts from one IP still trips the IP-level lockout; and
+  registration — it's refused without accepting the Terms & Privacy Policy,
+  a successful registration records `terms_accepted_at`, and the form links
+  to both documents.
 - The **`contact` app has a test suite** (`contact/tests.py`): the page
   renders with the map container, and the map carries no tile key when
   `GEOAPIFY_API_KEY` is unset but carries it through to `data-tile-key`

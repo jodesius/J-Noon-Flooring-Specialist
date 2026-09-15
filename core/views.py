@@ -14,6 +14,14 @@ def home(request):
     return render(request, "core/home.html", {"reviews": reviews})
 
 
+def privacy(request):
+    return render(request, "core/privacy.html")
+
+
+def terms(request):
+    return render(request, "core/terms.html")
+
+
 def robots_txt(request):
     """Tells crawlers which parts of the site are worth indexing - the
     marketing pages, not the customer portal, checkout or admin. The

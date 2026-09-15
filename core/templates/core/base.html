@@ -156,6 +156,10 @@
             <p class="site-footer__text">
                 &copy; {% now "Y" %} J-Noon Flooring Specialist. All rights reserved.
             </p>
+            <nav class="site-footer__legal" aria-label="Legal">
+                <a href="{% url 'core:privacy' %}">Privacy Policy</a>
+                <a href="{% url 'core:terms' %}">Terms &amp; Conditions</a>
+            </nav>
         </div>
     </footer>
 

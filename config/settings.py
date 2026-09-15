@@ -46,6 +46,26 @@ ALLOWED_HOSTS = [
 ]
 
 
+# Error monitoring (Sentry) - https://sentry.io
+# Free to sign up; a project gives you a DSN to paste into SENTRY_DSN.
+# Inactive (does nothing at all) until that's set, so this is a no-op in
+# local dev unless you want it there too. send_default_pii is off since
+# requests here carry genuine customer data (names, addresses, phone
+# numbers) that has no business leaving the app for an error tracker.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+        environment="development" if DEBUG else "production",
+    )
+
+
 # Application definition
 
 INSTALLED_APPS = [

@@ -1,0 +1,209 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Privacy Policy{% endblock %}
+{% block meta_description %}How J-Noon Flooring Specialist collects, uses and protects your personal data, and how to exercise your rights over it.{% endblock %}
+
+{% block body_class %}page-legal{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'core/css/legal.css' %}">
+{% endblock %}
+
+{% block content %}
+<article class="legal-page">
+    <h1>Privacy Policy</h1>
+    <p class="legal-page__updated">Last updated: {% now "j F Y" %}</p>
+
+    <div class="legal-page__intro">
+        This page explains what personal data J-Noon Flooring Specialist
+        ("we", "us") collects through this website, why, who we share it
+        with, and how you can ask us about it. It's written in plain
+        English rather than legal boilerplate — if anything is unclear,
+        <a href="{% url 'contact:index' %}">get in touch</a> and we'll
+        explain it properly.
+    </div>
+
+    <h2>Who we are</h2>
+    <p>
+        J-Noon Flooring Specialist is a flooring installation business
+        covering Chelmsford and the surrounding area of Essex. We're the
+        data controller for the personal data described on this page —
+        that means we decide what's collected and why, and we're
+        responsible for looking after it.
+    </p>
+
+    <h2>What we collect, and why</h2>
+    <ul>
+        <li>
+            <strong>Account details</strong> — username, email address and
+            a hashed password, if you register for an account. We need
+            this to run your account and let you log back in; your
+            password itself is never stored in readable form.
+        </li>
+        <li>
+            <strong>Contact and booking details</strong> — name, phone
+            number, and the address where the work is to be done, when you
+            request a quote, book a call-back, or book a job. We need this
+            to get in touch with you and to actually carry out the work.
+        </li>
+        <li>
+            <strong>Job details and messages</strong> — anything you tell
+            us about the job (room sizes, flooring type, access notes), and
+            any messages or photos exchanged with us through a job's chat
+            once it's booked. This is how we plan and deliver the work, and
+            keep a record of what was agreed.
+        </li>
+        <li>
+            <strong>Payment information</strong> — if you pay by card, your
+            card details are handled entirely by our payment provider,
+            Stripe; they never reach our own servers. We keep a record of
+            the payment itself (amount, date, and a reference from Stripe),
+            not your card number.
+        </li>
+        <li>
+            <strong>Reviews</strong> — if you choose to leave a review, we
+            store the text, star rating and any photo you attach, together
+            with your account. Reviews are only published after we've
+            looked at them.
+        </li>
+        <li>
+            <strong>Enquiries</strong> — if you use the contact form without
+            an account, we store the name, email, phone number and message
+            you provide, so we can reply.
+        </li>
+        <li>
+            <strong>Technical data</strong> — standard things like your IP
+            address and browser, collected automatically to keep the site
+            secure (for example, to stop automated abuse of our forms) and
+            to make it work properly. We don't use this to track you around
+            the web.
+        </li>
+    </ul>
+    <p>
+        We only ask for what we actually need to quote for, book, and carry
+        out flooring work, and to run an account if you choose to have one.
+    </p>
+
+    <h2>Our legal basis for using your data</h2>
+    <ul>
+        <li><strong>Contract</strong> — most of what we do (quoting,
+            booking, carrying out and getting paid for a job) is necessary
+            to perform a contract with you, or to take steps at your
+            request before entering into one.</li>
+        <li><strong>Legitimate interests</strong> — things like fraud
+            prevention, keeping the site secure, and improving how it
+            works.</li>
+        <li><strong>Consent</strong> — for account registration, you
+            actively agree to this policy and our
+            <a href="{% url 'core:terms' %}">Terms &amp; Conditions</a>
+            when you sign up, and we keep a record of when you did.</li>
+        <li><strong>Legal obligation</strong> — we may need to keep certain
+            records (e.g. for tax purposes) for a set period regardless of
+            any other request.</li>
+    </ul>
+
+    <h2>Who we share it with</h2>
+    <p>
+        We don't sell your data. It's shared only with the services that
+        genuinely help us run the site and the business:
+    </p>
+    <ul>
+        <li><strong>Stripe</strong> — processes card payments. Stripe is
+            PCI-DSS compliant; your card details go to them directly, not
+            through us.</li>
+        <li><strong>Cloudinary</strong> — hosts uploaded photos (profile
+            pictures, review photos, job photos, gallery photos).</li>
+        <li><strong>Google Calendar</strong> — if you book a call-back, the
+            date, time and your name/phone may be added to our fitter's
+            calendar so the call actually happens.</li>
+        <li><strong>Anthropic (Claude)</strong> — if you use the online
+            quote tool, the details you type in (not your account
+            identity) are sent to generate a rough, non-binding estimate.
+            Every AI estimate is reviewed by a person before any job is
+            confirmed.</li>
+        <li><strong>Geoapify</strong> — supplies the map tiles on our
+            Contact page; loading the map sends your IP address to them,
+            the same as any map service.</li>
+        <li><strong>Our email and hosting providers</strong> — used to send
+            you emails (booking confirmations, password resets, etc.) and
+            to store the site's database securely.</li>
+    </ul>
+    <p>
+        We only share what each service needs to do its specific job, and
+        we don't hand your data to anyone for marketing purposes.
+    </p>
+
+    <h2>How long we keep it</h2>
+    <p>
+        We keep account and job data for as long as your account is active
+        or as long as needed to deal with any ongoing or potential dispute,
+        and for a reasonable period after that for our own records (for
+        example, tax and accounting rules typically require financial
+        records to be kept for several years). If you ask us to delete your
+        account, we'll remove what we can, but we may need to keep a
+        minimal record of a completed job and its payments where the law
+        requires it.
+    </p>
+
+    <h2>Cookies</h2>
+    <p>
+        This site uses only the cookies necessary to make it work: one to
+        keep you logged in (your session), and one that protects forms from
+        being submitted by malicious sites (CSRF protection). We don't use
+        advertising or analytics cookies, and nothing here tracks you
+        across other websites.
+    </p>
+
+    <h2>Your rights</h2>
+    <p>
+        Under UK data protection law, you can ask us to:
+    </p>
+    <ul>
+        <li>tell you what personal data we hold about you, and why;</li>
+        <li>correct anything that's inaccurate or out of date;</li>
+        <li>delete your data, where we're not required to keep it;</li>
+        <li>restrict or object to certain uses of your data; and</li>
+        <li>receive a copy of your data in a portable format.</li>
+    </ul>
+    <p>
+        Most of this you can already do yourself from your
+        {% if user.is_authenticated %}<a href="{% url 'accounts:profile' %}">account
+        page</a>{% else %}account page once logged in{% endif %}. For
+        anything else,
+        {% if site_contact.email %}
+            email us at
+            <a href="mailto:{{ site_contact.email }}">{{ site_contact.email }}</a>
+        {% else %}
+            use our <a href="{% url 'contact:index' %}">contact form</a>
+        {% endif %}
+        and we'll respond within a reasonable time. If you're unhappy with
+        how we've handled your data, you can also complain to the
+        <a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noopener">
+        Information Commissioner's Office (ICO)</a>, the UK's data
+        protection regulator.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+        This site is intended for adults arranging flooring work. We don't
+        knowingly collect data from children.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+        If we change how we handle your data, we'll update this page and
+        change the date at the top. Significant changes will be flagged
+        more prominently.
+    </p>
+
+    <h2>Contact us</h2>
+    <p>
+        Questions about this policy or your data are welcome — use our
+        <a href="{% url 'contact:index' %}">contact form</a>
+        {% if site_contact.email %}
+            or email <a href="mailto:{{ site_contact.email }}">{{ site_contact.email }}</a>
+        {% endif %}.
+    </p>
+</article>
+{% endblock %}

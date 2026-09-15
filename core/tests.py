@@ -278,3 +278,24 @@ class SitemapTests(TestCase):
                 any(loc.endswith(path) for loc in locs),
                 f"{path} not found in sitemap: {locs}",
             )
+
+
+class LegalPageTests(TestCase):
+    """Privacy Policy / Terms & Conditions - added during the pre-launch
+    security/compliance review, alongside the registration consent
+    checkbox in accounts/tests.py::RegistrationTermsTests."""
+
+    def test_privacy_page_renders(self):
+        resp = self.client.get(reverse("core:privacy"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Privacy Policy")
+
+    def test_terms_page_renders(self):
+        resp = self.client.get(reverse("core:terms"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Terms")
+
+    def test_footer_links_to_both_on_any_page(self):
+        resp = self.client.get(reverse("core:home"))
+        self.assertContains(resp, reverse("core:privacy"))
+        self.assertContains(resp, reverse("core:terms"))

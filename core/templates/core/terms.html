@@ -1,0 +1,180 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Terms & Conditions{% endblock %}
+{% block meta_description %}The terms that apply when you get a quote, book a job, or pay for work with J-Noon Flooring Specialist.{% endblock %}
+
+{% block body_class %}page-legal{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'core/css/legal.css' %}">
+{% endblock %}
+
+{% block content %}
+<article class="legal-page">
+    <h1>Terms &amp; Conditions</h1>
+    <p class="legal-page__updated">Last updated: {% now "j F Y" %}</p>
+
+    <div class="legal-page__intro">
+        These terms apply whenever you get a quote, book a job, or make a
+        payment through this website with J-Noon Flooring Specialist
+        ("we", "us"). Using the site or booking with us means you accept
+        them. See also our <a href="{% url 'core:privacy' %}">Privacy
+        Policy</a> for how we handle your data.
+    </div>
+
+    <h2>Quotes and estimates</h2>
+    <p>
+        Any figure you're given through the online quote tool — including
+        AI-generated estimates — is a <strong>rough, non-binding
+        estimate</strong>, not a fixed price. Every job is confirmed with a
+        real price and start date only after we've had a chance to review
+        the details (and, where needed, see the site), before any work
+        begins or money changes hands beyond a booking fee.
+    </p>
+
+    <h2>Booking a job</h2>
+    <p>
+        Once we've agreed a price and a start date, a job is confirmed by
+        paying a <strong>booking fee of 20% of the agreed price</strong>.
+        The remaining balance is due as set out when the job is confirmed
+        — typically on or after completion, unless we've agreed otherwise
+        with you directly.
+    </p>
+    <p>
+        Payments can be made by card (processed securely through Stripe),
+        bank transfer, or cash, as agreed with us.
+    </p>
+
+    <h2>Changes to the job</h2>
+    <p>
+        If the scope of the work changes once we've started — for example,
+        the subfloor needs more preparation than expected, or you'd like
+        to add or change rooms — we'll discuss it with you and agree any
+        change to the price before carrying out the extra work.
+    </p>
+
+    <h2>Changing your mind once work has started</h2>
+    <p>
+        The flooring, colour and spec you agree with us before work begins
+        is what we order materials and plan the job around. If you change
+        your mind about any of that <strong>after work has started</strong>
+        — for example, deciding on a different flooring part-way through —
+        we'll do our best to accommodate it, but you'll need to cover the
+        cost of lifting and disposing of whatever's already been fitted,
+        plus the cost of the new materials in place of what was originally
+        agreed. This is simply the real cost of the change, not a penalty —
+        so it's worth being sure of your choice before we start, and we're
+        always happy to talk it through beforehand.
+    </p>
+
+    <h2>Cancellations</h2>
+    <p>
+        If you need to move your start date rather than cancel entirely,
+        get in touch as soon as possible through your job's message thread
+        or the <a href="{% url 'contact:index' %}">contact page</a> and
+        we'll do our best to find a date that works for both of us.
+    </p>
+    <p>
+        If you cancel a booked job, the <strong>booking fee is
+        non-refundable</strong>. Booking a job means turning away other
+        work for that time, and often ordering materials for it in
+        advance — the fee reflects a genuine cost to us, not a penalty.
+        Let us know as soon as possible all the same; it doesn't change
+        the fee, but it helps us re-fill the slot.
+    </p>
+
+    <h2>Refunds</h2>
+    <p>
+        Where a refund is agreed, it's applied as a credit against the
+        outstanding balance on your job — it reduces what you still owe
+        rather than being netted off the price or the amount already paid,
+        so your account always shows exactly what was agreed, what's been
+        paid, and what's been refunded. You can request a refund from your
+        job's page once you've made a payment; we'll be in touch to sort
+        it out.
+    </p>
+
+    <h2>Our work</h2>
+    <p>
+        We aim for a standard of work we'd be happy with in our own home.
+        If something about the finished job isn't right, tell us as soon
+        as you spot it — through the job's message thread if it's still
+        open, or the <a href="{% url 'contact:index' %}">contact page</a>
+        otherwise — and we'll put it right.
+    </p>
+
+    <h2 id="accidental-damage">Accidental damage to your property</h2>
+    <p>
+        If something of yours is accidentally damaged while we're carrying
+        out the work — for example, a window broken while fitting — we'll
+        cover the <strong>full cost of repairing or replacing it
+        ourselves</strong>. That cost comes off the total price of your
+        job, not added on top as a separate bill. If the cost of the
+        damage is more than the total price of the job, you won't be
+        charged anything at all for the work — we cover the difference ourselves.
+    </p>
+    <p>
+        To keep this fair for everyone, a damage claim needs to be reported
+        <strong>promptly</strong> — ideally on the day, before we leave —
+        through the job's message thread, with photos of the damage. Where
+        practical, we'll photograph the work area before starting, which
+        protects you too: it's a clear record of the property's condition
+        beforehand. We'll always look at a genuine claim in good faith, but
+        we can only cover damage that's reasonably shown to have happened
+        during our work — not pre-existing wear, or anything unrelated to
+        the job.
+    </p>
+
+    <h2>Your account</h2>
+    <p>
+        You're responsible for keeping your login details secure and for
+        anything done through your account. Registering requires agreeing
+        to these terms and our
+        <a href="{% url 'core:privacy' %}">Privacy Policy</a>. Please give
+        us accurate contact and address details — we rely on them to
+        arrange and carry out the work.
+    </p>
+
+    <h2>Reviews</h2>
+    <p>
+        Reviews are moderated before they appear publicly, and we may
+        decline or remove a review that's abusive, defamatory, or clearly
+        not a genuine account of work we carried out. Otherwise, honest
+        reviews — good or bad — are welcome.
+    </p>
+
+    <h2>Liability</h2>
+    <p>
+        Nothing in these terms limits our liability for things that can't
+        legally be limited, such as death or personal injury caused by our
+        negligence, or fraud. For accidental damage to your property while
+        we're working, the <a href="#accidental-damage">Accidental damage
+        to your property</a> section above sets out what we cover. Beyond
+        that, our liability for any job is limited to a reasonable
+        standard of care in carrying out the work agreed.
+    </p>
+
+    <h2>Changes to these terms</h2>
+    <p>
+        We may update these terms from time to time; the date at the top
+        shows when they last changed. Continuing to use the site after a
+        change means you accept the updated terms.
+    </p>
+
+    <h2>Governing law</h2>
+    <p>
+        These terms are governed by the law of England and Wales, and any
+        dispute will be handled by the courts of England and Wales.
+    </p>
+
+    <h2>Contact us</h2>
+    <p>
+        Questions about these terms are welcome — use our
+        <a href="{% url 'contact:index' %}">contact form</a>
+        {% if site_contact.email %}
+            or email <a href="mailto:{{ site_contact.email }}">{{ site_contact.email }}</a>
+        {% endif %}.
+    </p>
+</article>
+{% endblock %}

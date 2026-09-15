@@ -131,6 +131,12 @@
                 {% endif %}
             {% endfor %}
 
+            <p class="contact-form__privacy-note">
+                We'll only use these details to reply to you. See our
+                <a href="{% url 'core:privacy' %}">Privacy Policy</a> for
+                how we handle it.
+            </p>
+
             <button type="submit" class="contact-form__submit">Send message</button>
         </form>
     </div>

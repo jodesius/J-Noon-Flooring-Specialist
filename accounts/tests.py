@@ -1,8 +1,21 @@
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
+from django.urls import reverse
 
 User = get_user_model()
+
+
+def valid_registration(**extra):
+    data = {
+        "email": "newuser@example.com",
+        "username": "newuser",
+        "password": "pw1!pass",
+        "password_confirm": "pw1!pass",
+        "terms_accepted": "on",
+    }
+    data.update(extra)
+    return data
 
 
 class LoginRedirectTests(TestCase):
@@ -109,3 +122,28 @@ class LoginThrottleTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Too many failed attempts")
+
+
+class RegistrationTermsTests(TestCase):
+    """Registration requires agreeing to the Terms & Privacy Policy, and
+    records exactly when - added alongside those pages during the
+    pre-launch security/compliance review."""
+
+    def test_registration_requires_accepting_terms(self):
+        resp = self.client.post(
+            reverse("accounts:register"), valid_registration(terms_accepted=""),
+        )
+        self.assertEqual(resp.status_code, 200)  # re-rendered with the error
+        self.assertFalse(User.objects.filter(username="newuser").exists())
+        self.assertContains(resp, "accept the Terms")
+
+    def test_registration_records_when_terms_were_accepted(self):
+        resp = self.client.post(reverse("accounts:register"), valid_registration())
+        self.assertEqual(resp.status_code, 302)
+        user = User.objects.get(username="newuser")
+        self.assertIsNotNone(user.terms_accepted_at)
+
+    def test_registration_form_links_to_both_documents(self):
+        resp = self.client.get(reverse("accounts:register"))
+        self.assertContains(resp, reverse("core:terms"))
+        self.assertContains(resp, reverse("core:privacy"))

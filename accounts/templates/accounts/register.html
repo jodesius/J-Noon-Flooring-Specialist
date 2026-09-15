@@ -56,6 +56,16 @@
             {% endfor %}
         </div>
 
+        <div class="auth__checkbox">
+            <label for="{{ form.terms_accepted.id_for_label }}">
+                {{ form.terms_accepted }}
+                {{ form.terms_accepted.label }}
+            </label>
+            {% for error in form.terms_accepted.errors %}
+                <span class="auth__error">{{ error }}</span>
+            {% endfor %}
+        </div>
+
         <button type="submit" class="auth__submit">Register</button>
     </form>
 

@@ -203,6 +203,13 @@
     border-radius: 6px;
     padding: 0.7rem 1rem;
 }
+.contact-form__privacy-note {
+    font-size: 0.8rem;
+    color: #6b6b6b;
+    margin: -0.5rem 0 0;
+}
+.contact-form__privacy-note a { color: #6a4423; }
+
 .contact-form__submit {
     align-self: flex-start;
     font: inherit;

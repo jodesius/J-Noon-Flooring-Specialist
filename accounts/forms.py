@@ -3,6 +3,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.validators import UnicodeUsernameValidator
+from django.urls import reverse_lazy
+from django.utils import timezone
+from django.utils.html import format_html
 
 from .models import Profile
 
@@ -28,6 +31,13 @@ class RegisterForm(forms.ModelForm):
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
     )
+    terms_accepted = forms.BooleanField(
+        required=True,
+        error_messages={
+            "required": "You need to accept the Terms & Conditions and "
+            "Privacy Policy to create an account.",
+        },
+    )
 
     class Meta:
         model = User
@@ -36,6 +46,15 @@ class RegisterForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"autocomplete": "email"}),
             "username": forms.TextInput(attrs={"autocomplete": "username"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["terms_accepted"].label = format_html(
+            'I agree to the <a href="{}" target="_blank" rel="noopener">Terms '
+            '&amp; Conditions</a> and <a href="{}" target="_blank" '
+            'rel="noopener">Privacy Policy</a>',
+            reverse_lazy("core:terms"), reverse_lazy("core:privacy"),
+        )
 
     def clean_email(self):
         email = self.cleaned_data.get("email", "").strip().lower()
@@ -72,6 +91,7 @@ class RegisterForm(forms.ModelForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.set_password(self.cleaned_data["password"])
+        user.terms_accepted_at = timezone.now()
         if commit:
             user.save()
         return user

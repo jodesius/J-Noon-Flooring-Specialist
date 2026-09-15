@@ -17,6 +17,13 @@ class User(AbstractUser):
     email = models.EmailField("email address", unique=True)
     email_verified = models.BooleanField("email verified", default=False)
 
+    # Set the moment registration completes - a record of exactly when
+    # consent was given, not just that the box was ticked, in case it's
+    # ever disputed.
+    terms_accepted_at = models.DateTimeField(
+        "terms & privacy policy accepted", null=True, blank=True,
+    )
+
     # username stays the USERNAME_FIELD; email is also asked for by
     # `createsuperuser` because it is listed here.
     REQUIRED_FIELDS = ["email"]
