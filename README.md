@@ -1057,6 +1057,13 @@ from this codebase):
    project itself was lost, or the same one if this is just rolling back a
    bad change.
 
+If `pg_restore` isn't already installed locally, make sure its version is
+**at least as new as Neon's Postgres version** (currently 18) — an older
+`pg_dump`/`pg_restore` refuses to work against a newer server. This bit the
+backup workflow itself once already (it originally installed whatever
+generic `postgresql-client` apt pulled in, which was v16); the workflow now
+installs v18 explicitly via the official PGDG apt repo.
+
 ---
 
 ## Email

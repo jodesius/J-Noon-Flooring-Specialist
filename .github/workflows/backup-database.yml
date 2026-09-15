@@ -19,8 +19,16 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # The plain "postgresql-client" package can lag behind Neon's actual
+      # Postgres version, and pg_dump refuses to dump from a server newer
+      # than itself. Pull from the official PGDG repo and install v18
+      # explicitly (bump this if Neon moves to a newer major version).
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
 
       - name: Dump the database
         env:
@@ -33,7 +41,7 @@ jobs:
           fi
           timestamp="$(date -u +%Y%m%d-%H%M%S)"
           echo "name=backup-${timestamp}" >> "$GITHUB_ENV"
-          pg_dump "$DATABASE_URL" --format=custom --file="backup-${timestamp}.dump"
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" --format=custom --file="backup-${timestamp}.dump"
 
       - name: Upload as a workflow artifact
         uses: actions/upload-artifact@v7
