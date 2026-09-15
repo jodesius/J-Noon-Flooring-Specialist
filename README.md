@@ -1521,11 +1521,10 @@ from the live `SiteContact` admin record by `core/structured_data.py`.
   disallows the same private paths the per-page `noindex` tags cover.
 - **`sitemap.xml`** (`core/sitemaps.py`, wired in `config/urls.py`) lists the
   5 public pages via `django.contrib.sitemaps`.
-- **Favicons** are currently **placeholders** — the existing "JN" monogram
-  mark, resized via Cloudinary URL transforms, wired into the `<link
+- **Favicons** — real assets (16×16, 32×32, 48×48, and a 180×180
+  apple-touch-icon for iOS home-screen bookmarks), wired into the `<link
   rel="icon">` / `<link rel="apple-touch-icon">` tags in
-  `core/templates/core/base.html`. Swap those four URLs for real favicon
-  assets when they're supplied (see the Roadmap).
+  `core/templates/core/base.html`.
 - Canonical and Open Graph URLs are built per-request from `request.scheme` /
   `request.get_host` / `request.path` (not hardcoded), since production tests
   under a not-yet-decided domain.
@@ -1586,9 +1585,8 @@ shared code.
 
 - [ ] Replace the default review photo placeholder (`DEFAULT_REVIEW_IMAGE`
       in `reviews/models.py`) — shown on postcards with no uploaded image
-- [ ] Swap the placeholder favicon URLs in `core/templates/core/base.html`
-      (32x32, 16x16, apple-touch-icon 180x180) for real favicon assets once
-      supplied — see [SEO & metadata](#seo--metadata)
+- [x] Real favicons (16x16, 32x32, 48x48, apple-touch-icon 180x180) —
+      see [SEO & metadata](#seo--metadata)
 - [x] Home page — hero (real work photo), about, recent-reviews strip,
       "how we work" (three service options), "what we do" (seven systems)
 - [ ] Add photos to the "what we do" cards (currently text only)
