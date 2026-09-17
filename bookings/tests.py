@@ -135,7 +135,7 @@ class QuoteFlowTests(TestCase):
         resp = self.client.get(reverse("bookings:quote"))
         self.assertContains(resp, 'id="bk-loading"')
         self.assertContains(resp, "quote-loading.js")
-        self.assertContains(resp, "Your quote is being calculated")
+        self.assertContains(resp, "Your estimate is being calculated")
 
     @patch("bookings.views.generate_quote")
     def test_valid_submission_creates_request_and_emails(self, mock_gen):
