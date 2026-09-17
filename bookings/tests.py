@@ -4,7 +4,6 @@ from decimal import Decimal
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -50,6 +49,20 @@ def make_user(username="cust"):
     return User.objects.create_user(
         username=username, email=f"{username}@example.com", password="pw1!pass"
     )
+
+
+def set_staff_notify_email(email="joseph@example.com"):
+    """`_email_staff` sends to SiteContact.enquiry_email, not
+    DEFAULT_FROM_EMAIL (that's the outgoing "from" address, not where
+    Joseph actually reads mail) - tests that check staff notification
+    emails need this set, same as contact/tests.py already does for
+    enquiries."""
+    from contact.models import SiteContact
+
+    contact = SiteContact.load()
+    contact.email = email
+    contact.save()
+    return contact
 
 
 def clear_rate_card():
@@ -127,6 +140,7 @@ class QuoteFlowTests(TestCase):
     def setUp(self):
         self.user = make_user()
         self.client.force_login(self.user)
+        set_staff_notify_email()
 
     def _post(self, **extra):
         return self.client.post(reverse("bookings:quote"), base_payload(**extra))
@@ -422,6 +436,7 @@ class CallRequestTests(TestCase):
     def setUp(self):
         self.user = make_user()
         self.client.force_login(self.user)
+        set_staff_notify_email()
 
     def _payload(self, **extra):
         data = {
@@ -513,6 +528,7 @@ class BookJobTests(TestCase):
     def setUp(self):
         self.user = make_user()
         self.client.force_login(self.user)
+        set_staff_notify_email()
 
     def _payload(self, **extra):
         data = {
@@ -604,6 +620,7 @@ class QuoteToBookingTests(TestCase):
     def setUp(self):
         self.user = make_user()
         self.client.force_login(self.user)
+        set_staff_notify_email()
         self.quote = QuoteRequest.objects.create(
             user=self.user, service_option=QuoteRequest.Service.SUPPLY_FIT,
             postcode="CM1 2AB", rooms="kitchen and hall", contact_name="Dana Floors",
@@ -987,6 +1004,7 @@ class JobChatTests(TestCase):
             user=self.customer, title="Hall & stairs", status=Job.Status.NOT_STARTED,
             agreed_price=Decimal("1000.00"), contact_name="Chat Customer",
         )
+        set_staff_notify_email()
 
     def _url(self):
         return reverse("bookings:project_detail", kwargs={"slug": self.job.slug})
@@ -1020,7 +1038,7 @@ class JobChatTests(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn(self.job.reference, mail.outbox[0].subject)
-        self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+        self.assertEqual(mail.outbox[0].to, ["joseph@example.com"])
 
     @LOCMEM
     def test_staff_reply_is_marked_staff_and_emails_the_customer(self):
@@ -1129,6 +1147,7 @@ class StripePaymentTests(TestCase):
             status=Job.Status.AWAITING_DEPOSIT, contact_name="Sam Payer",
             site_address="1 Test Rd, Chelmsford",
         )
+        set_staff_notify_email()
 
     def _detail_url(self):
         return reverse("bookings:project_detail", kwargs={"slug": self.job.slug})
@@ -1476,6 +1495,7 @@ class StaffManageTests(TestCase):
             user=self.customer, title="Hall LVT", contact_name="Cass Customer",
         )
         self.client.force_login(self.staff)
+        set_staff_notify_email()
 
     def _detail(self):
         return reverse("bookings:project_detail", kwargs={"slug": self.job.slug})
@@ -1713,7 +1733,7 @@ class StaffManageTests(TestCase):
         self.assertEqual(rr.requested_by, self.customer)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Refund requested", mail.outbox[0].subject)
-        self.assertEqual(mail.outbox[0].to, [settings.DEFAULT_FROM_EMAIL])
+        self.assertEqual(mail.outbox[0].to, ["joseph@example.com"])
 
     def test_refund_request_needs_a_reason(self):
         Payment.objects.create(

@@ -68,11 +68,22 @@ def _over_limit(model, user, limit):
 
 
 def _email_staff(request, subject_template, body_template, ctx):
+    """Notify Joseph, not the site's own no-reply address.
+
+    `DEFAULT_FROM_EMAIL` is the outgoing "from" branding address
+    (no-reply@...) - staff notifications need to land somewhere he
+    actually reads. Reuses the same admin-configurable recipient the
+    contact form already sends enquiries to (SiteContact.enquiry_email),
+    so there's one place to manage this, not two.
+    """
+    from contact.models import SiteContact
+
     subject = render_to_string(subject_template, ctx).strip()
     body = render_to_string(body_template, ctx)
-    EmailMessage(subject=subject, body=body, to=[settings.DEFAULT_FROM_EMAIL]).send(
-        fail_silently=True
-    )
+    recipient = SiteContact.load().enquiry_email
+    if not recipient:
+        return
+    EmailMessage(subject=subject, body=body, to=[recipient]).send(fail_silently=True)
 
 
 def _email_customer(job, subject_template, body_template, ctx):

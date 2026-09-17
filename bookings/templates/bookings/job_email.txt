@@ -12,10 +12,9 @@ From online quote {{ job.quote_request.reference }}.{% if job.quote_request.quot
 Full quote answers: {{ quote_url }}
 {% else %}
 Not from an online quote.
-{% endif %}{% if job.customer_note %}
-Their message:
-{{ job.customer_note }}
 {% endif %}
+Their message:
+{{ job.customer_note|default:"No message left." }}
 Next step: open the job in the admin, set the agreed price and start date,
 then run "Confirm booking" so they can pay the booking fee.
 
