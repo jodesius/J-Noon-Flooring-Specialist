@@ -45,6 +45,31 @@ ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
 
+# Django's CSRF check needs the real scheme+host explicitly trusted too,
+# separate from ALLOWED_HOSTS - derived from it so there's only one domain
+# to configure, not two.
+CSRF_TRUSTED_ORIGINS = [f"https://{host}" for host in ALLOWED_HOSTS]
+
+# Production-only hardening - all a no-op locally, since DEBUG defaults to
+# True there. Sits behind a reverse proxy (Cloudflare -> the host), so
+# SECURE_PROXY_SSL_HEADER tells Django to trust that proxy's word on
+# whether the original request was HTTPS - required for SECURE_SSL_REDIRECT
+# and the *_COOKIE_SECURE settings to work correctly instead of redirect-
+# looping or never seeing a request as "secure".
+#
+# SECURE_HSTS_SECONDS starts deliberately low (1 hour) rather than jumping
+# straight to the usual year-long value: HSTS is a promise browsers hold
+# you to - get it wrong on a fresh deploy and visitors' browsers refuse to
+# even try plain HTTP for however long this is set to, no matter what you
+# fix server-side. Raise it once this has run cleanly on the real domain
+# for a while (see README's Production deployment section).
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_HSTS_SECONDS = 60 * 60
+
 
 # Error monitoring (Sentry) - https://sentry.io
 # Free to sign up; a project gives you a DSN to paste into SENTRY_DSN.
@@ -91,6 +116,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Serves /static/ directly from the app - Django only auto-serves it
+    # in DEBUG mode, and there's no separate static host/CDN for this app.
+    # Must come straight after SecurityMiddleware (Whitenoise's own
+    # requirement).
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -187,6 +217,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+# Where `collectstatic` gathers files to - Whitenoise then serves straight
+# from here. Not used locally (runserver serves static files directly
+# without collectstatic), only relevant once DEBUG=False.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 
 # Media files (user uploads, e.g. profile images)
@@ -216,7 +250,14 @@ STORAGES = {
         ),
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        # Compressed + cache-busted (hashed filenames) in production;
+        # plain in dev, since that needs collectstatic to have run first
+        # and local dev never runs it.
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if not DEBUG
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
     },
 }
 

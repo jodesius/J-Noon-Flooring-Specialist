@@ -903,6 +903,8 @@ J-Flooring-Specialist/
 │   └── static/contact/     # contact.css, contact.js (Leaflet map)
 ├── manage.py
 ├── requirements.txt
+├── Procfile                # migrate -> collectstatic -> gunicorn, run on each deploy
+├── .python-version         # Python version Railway builds with
 ├── .env.example
 └── README.md
 ```
@@ -1537,19 +1539,72 @@ from the live `SiteContact` admin record by `core/structured_data.py`.
 
 ## Production deployment
 
-1. Set environment variables on the host: `DJANGO_SECRET_KEY` (a fresh one),
-   `DATABASE_URL`, `CLOUDINARY_URL`, and the email variables (`EMAIL_HOST`,
-   `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`,
-   `DEFAULT_FROM_EMAIL`). No `.env` file is deployed.
-2. Apply the [production hardening checklist](#production-hardening-checklist)
-   in `settings.py` — gate the `SECURE_*` settings on `DEBUG` being `False`.
-3. `python manage.py collectstatic`
-4. `python manage.py migrate` (this also refreshes the Site Administrators
-   permission group; `python manage.py sync_roles` runs it on demand).
-5. Serve through a WSGI server (e.g. Gunicorn) behind HTTPS.
-6. Serve `/static/` and `/media/` from the host or a CDN/object store —
-   Django only serves them in `DEBUG` mode.
-7. Run `python manage.py check --deploy` and resolve every warning.
+**Hosting: Railway (runs the app) + Cloudflare (DNS/CDN in front of it).**
+Cloudflare alone doesn't run a Django app — it needs somewhere to actually
+host the process, which is what Railway is for here. The Neon database and
+Cloudinary media storage are already external to both, so Railway only
+needs to run the app itself.
+
+Already handled in code, nothing further needed for these:
+- `Procfile` runs migrations, `collectstatic`, then starts Gunicorn on
+  each deploy.
+- `.python-version` pins the Python version Railway builds with.
+- Static files (`/static/`) are served by **Whitenoise**
+  (`whitenoise.middleware.WhiteNoiseMiddleware` + `CompressedManifestStaticFilesStorage`
+  when `DEBUG=False`) — compressed and cache-busted, no separate CDN
+  needed for them. Media uploads already go to Cloudinary regardless.
+- `CSRF_TRUSTED_ORIGINS` is derived automatically from `DJANGO_ALLOWED_HOSTS`.
+- The `SECURE_*` hardening settings (`SECURE_SSL_REDIRECT`,
+  `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_PROXY_SSL_HEADER`,
+  a conservative 1-hour `SECURE_HSTS_SECONDS`) are all gated behind
+  `if not DEBUG:` — they switch on automatically the moment `DJANGO_DEBUG`
+  is set to `False` in the host's environment, no other code change needed.
+  `SECURE_HSTS_INCLUDE_SUBDOMAINS` / `SECURE_HSTS_PRELOAD` are deliberately
+  **not** enabled yet — HSTS is a promise browsers hold you to, so it's
+  safer to raise `SECURE_HSTS_SECONDS` gradually (e.g. to a year) once
+  the real domain has been running cleanly for a while, rather than
+  committing to the strictest settings on day one.
+
+**What's left is manual — account setup, secrets and DNS, done once:**
+
+1. Generate a real secret key (the current one is Django's `django-insecure-…`
+   dev default):
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(50))"
+   ```
+2. Push this branch to GitHub (already the norm for this repo).
+3. On [railway.app](https://railway.app): New Project → **Deploy from GitHub
+   repo** → select this repo. Railway detects Python via the `Procfile`
+   automatically — no Dockerfile needed.
+4. In the Railway project's **Variables** tab, set every variable from
+   `.env.example` that applies (see [Configuration](#configuration) for what
+   each does), with these production-specific values:
+   - `DJANGO_SECRET_KEY` — the fresh one from step 1.
+   - `DJANGO_DEBUG=False`
+   - `DJANGO_ALLOWED_HOSTS=<your real domain>` (no `https://`, just the
+     domain, e.g. `jnoonflooring.co.uk`)
+   - `DATABASE_URL` — same Neon connection string as local dev.
+   - `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` — **keep the TEST
+     keys** for a soft launch; only swap to live keys once you're ready
+     to actually take real payments (see [[stripe-webhook-for-prod]] for
+     the rest of that step, when the time comes).
+   - Everything else (`CLOUDINARY_URL`, `EMAIL_*`, `ANTHROPIC_API_KEY`,
+     `GOOGLE_CALENDAR_ID` / `GOOGLE_SERVICE_ACCOUNT_JSON`,
+     `GEOAPIFY_API_KEY`, `SENTRY_DSN`) — same real values as local dev.
+5. Railway project → **Settings → Networking → Custom Domain** → enter
+   your domain → it gives you a target hostname to point DNS at.
+6. In Cloudflare's DNS for that domain: add a **CNAME** record (Cloudflare
+   supports CNAME flattening at the root/apex, unlike most DNS providers)
+   pointing at the hostname Railway gave you. Leave it **Proxied** (orange
+   cloud) for Cloudflare's CDN/protection. Under **SSL/TLS**, set the mode
+   to **Full** or **Full (strict)** — not "Flexible", which assumes an
+   HTTP-only origin and will fight with Railway's own HTTPS.
+7. Watch the Railway deploy log for the first build. Once it's live, visit
+   the real domain and check: HTTPS padlock, home page renders, login
+   works, `/admin/` is reachable only when logged in as staff.
+8. Run `python manage.py check --deploy` against the production
+   environment variables and confirm only the two deliberate HSTS warnings
+   remain (see above) plus nothing else new.
 
 ---
 
