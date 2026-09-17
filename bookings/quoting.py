@@ -241,7 +241,12 @@ def generate_quote(qr, final_round=False):
         "max_q": MAX_FOLLOW_UP_QUESTIONS,
         "rate_card": build_rate_card(),
     }
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    # An explicit timeout matters here: without one, a slow/hung response
+    # blocks the request indefinitely with no exception ever raised for the
+    # except clauses below to catch - Gunicorn eventually kills the whole
+    # worker instead, which is an ugly 500 rather than the graceful
+    # "book a call" fallback this function already has.
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=45.0)
 
     try:
         response = client.messages.create(
