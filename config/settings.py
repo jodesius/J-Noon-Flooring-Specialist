@@ -106,6 +106,10 @@ INSTALLED_APPS = [
     "cloudinary_storage",
     "cloudinary",
 
+    # Resend transactional email (only actually used if RESEND_API_KEY is
+    # set - see the Email section below).
+    "anymail",
+
     "core",
     "gallery",
     "bookings",
@@ -116,11 +120,19 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    # Serves /static/ directly from the app - Django only auto-serves it
-    # in DEBUG mode, and there's no separate static host/CDN for this app.
-    # Must come straight after SecurityMiddleware (Whitenoise's own
-    # requirement).
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    *(
+        [
+            # Serves /static/ directly from the app - Django only
+            # auto-serves it in DEBUG mode, and there's no separate
+            # static host/CDN for this app. Must come straight after
+            # SecurityMiddleware (Whitenoise's own requirement).
+            # Production-only: it expects `collectstatic` to have already
+            # run (populating STATIC_ROOT), which local dev never does -
+            # runserver serves static files directly instead.
+            'whitenoise.middleware.WhiteNoiseMiddleware',
+        ]
+        if not DEBUG else []
+    ),
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -270,15 +282,24 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 #
-# Provider-agnostic SMTP. Set EMAIL_HOST_USER and EMAIL_HOST_PASSWORD in the
-# environment and email is sent for real; leave them blank and email is
-# printed to the runserver console instead.
+# Three ways this can end up sending, checked in this order:
+#   1. RESEND_API_KEY set -> Resend, over HTTPS (via django-anymail). Needed
+#      on hosts (e.g. Railway's Hobby plan) that block outbound SMTP
+#      entirely - found the hard way when every form that emails a
+#      notification (register, quote, call-back, booking) hung for the
+#      full Gunicorn worker timeout then 500'd, because the app was stuck
+#      waiting on a silently-blocked SMTP connection. HTTPS isn't blocked,
+#      so this sidesteps the problem rather than fighting the host for a
+#      pricier plan.
+#   2. EMAIL_HOST_USER + EMAIL_HOST_PASSWORD set -> real SMTP (e.g. Gmail
+#      locally) - fine wherever SMTP isn't blocked.
+#   3. Neither -> printed to the runserver console instead of sent.
 #
-# Defaults target Gmail (smtp.gmail.com:587, STARTTLS). Override EMAIL_HOST /
-# EMAIL_PORT / EMAIL_USE_SSL for another provider, e.g. Brevo:
-#   EMAIL_HOST=smtp-relay.brevo.com
-#   EMAIL_PORT=587
+# SMTP defaults target Gmail (smtp.gmail.com:587, STARTTLS). Override
+# EMAIL_HOST / EMAIL_PORT / EMAIL_USE_SSL for another SMTP provider, e.g.
+# Brevo: EMAIL_HOST=smtp-relay.brevo.com, EMAIL_PORT=587
 
+_resend_api_key = os.environ.get("RESEND_API_KEY", "")
 _email_host = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 _email_port = int(os.environ.get("EMAIL_PORT", "587"))
 _email_user = os.environ.get("EMAIL_HOST_USER", "")
@@ -290,7 +311,10 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     "J-Noon Flooring Specialist <no-reply@jnoonflooring.co.uk>",
 )
 
-if _email_user and _email_password:
+if _resend_api_key:
+    MAILERS = {"default": {"BACKEND": "anymail.backends.resend.EmailBackend"}}
+    ANYMAIL = {"RESEND_API_KEY": _resend_api_key}
+elif _email_user and _email_password:
     MAILERS = {
         "default": {
             "BACKEND": "django.core.mail.backends.smtp.EmailBackend",

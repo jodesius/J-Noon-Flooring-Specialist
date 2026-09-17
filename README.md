@@ -77,7 +77,7 @@ credentials live in the repository.
 | Config | `.env` via `python-dotenv` (`override=True`) + `dj-database-url` |
 | Images | Pillow (upload validation) |
 | Media storage | Cloudinary (`django-cloudinary-storage`); local `media/` folder when unconfigured |
-| Email | Provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when unconfigured |
+| Email | Resend (HTTPS, via `django-anymail`) when `RESEND_API_KEY` is set — needed on hosts that block outbound SMTP; otherwise provider-agnostic SMTP via Django 6.1 `MAILERS` (`EMAIL_HOST` / `PORT` / `USER` / `PASSWORD`); console backend when neither is configured |
 | Front end | Server-rendered Django templates, hand-written CSS/JS per app, no build step. One third-party library: Leaflet (from cdnjs) for the Contact page's coverage map |
 | Map tiles | Geoapify (free tier, commercial use allowed) when `GEOAPIFY_API_KEY` is set; falls back to OpenStreetMap's own raw tile server otherwise — fine for local dev, not for a live site's regular traffic (their usage policy blocks automated/heavy use) |
 | AI | Anthropic Claude via the official `anthropic` SDK (`claude-sonnet-5` by default) for the bookings quote engine — optional, off until `ANTHROPIC_API_KEY` is set |
@@ -978,7 +978,8 @@ development. See `.env.example` for the template.
 | `DJANGO_ALLOWED_HOSTS` | No | Comma-separated real domain(s) before going live, e.g. `jnoonflooring.co.uk,www.jnoonflooring.co.uk`. Unset = empty (local dev only). |
 | `SENTRY_DSN` | No | From <https://sentry.io> (free tier). Enables error monitoring — an unhandled exception in production is reported there instead of only ever showing up if a customer complains. Unset = no-op, errors just go to the server logs as before. |
 | `DATABASE_URL` | No | PostgreSQL connection string (Neon). If unset, a local SQLite file is used. |
-| `EMAIL_HOST` | No | SMTP server. Default `smtp.gmail.com`. |
+| `RESEND_API_KEY` | No | From <https://resend.com> (free tier). Sends email over HTTPS via `django-anymail` instead of SMTP — needed on hosts that block outbound SMTP (e.g. Railway's Hobby plan). Takes priority over the `EMAIL_*` SMTP settings below when set. |
+| `EMAIL_HOST` | No | SMTP server, only used when `RESEND_API_KEY` is unset. Default `smtp.gmail.com`. |
 | `EMAIL_PORT` | No | SMTP port. Default `587` (STARTTLS). |
 | `EMAIL_USE_SSL` | No | Set to `1` only for providers that need implicit SSL (port 465). |
 | `EMAIL_HOST_USER` | No | SMTP login. For Gmail, the full address; for other providers, the login they give you. |
@@ -1070,10 +1071,48 @@ installs v18 explicitly via the official PGDG apt repo.
 
 ## Email
 
-Password-reset links are the only transactional email today. The SMTP
-settings are provider-agnostic — set `EMAIL_HOST` / `EMAIL_PORT` /
-`EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` in `.env` and restart the server.
-Leave the user/password blank and email prints to the `runserver` console.
+Plenty of things send an email today, not just password resets: account
+registration (email verification), quote requests, call-back requests,
+job bookings, card payments, refund requests, and job-chat messages all
+notify Joseph and/or the customer.
+
+**Checked in this order** (`config/settings.py`):
+
+1. `RESEND_API_KEY` set → sends via [Resend](https://resend.com) over
+   HTTPS, using `django-anymail`.
+2. `EMAIL_HOST_USER` + `EMAIL_HOST_PASSWORD` set → real SMTP.
+3. Neither set → prints to the `runserver` console instead of sending.
+
+### Production: Resend (HTTPS, not SMTP)
+
+**Why this exists**: found the hard way after the first real deploy —
+Railway's Hobby plan (and several other budget PaaS tiers) blocks
+outbound SMTP (ports 25/465/587) entirely. Every view that sends a
+notification email hung for the full Gunicorn worker timeout, then
+500'd, even though the actual booking/quote/etc. had already saved
+successfully — Django's SMTP client was just stuck on a silently-dropped
+connection. HTTPS isn't blocked, so Resend (or any HTTP-API email
+provider `django-anymail` supports — Mailgun, SendGrid, Postmark, Brevo,
+etc. all work the same way) sidesteps the problem entirely rather than
+paying for a pricier hosting tier just to unblock SMTP.
+
+Setup:
+1. Sign up at [resend.com](https://resend.com) (free tier: 3,000
+   emails/month, 100/day — comfortably enough for this business).
+2. Add and verify your sending domain — Resend gives you SPF/DKIM/MX
+   records to add to your domain's DNS (Cloudflare, if that's where it's
+   managed). This also happens to be the email-deliverability DNS setup
+   this project's deploy checklist already needed — one step covers both.
+3. Create an API key (sending-only access is enough) and set
+   `RESEND_API_KEY` in the production environment.
+
+### Local dev / SMTP fallback
+
+The SMTP settings are provider-agnostic — set `EMAIL_HOST` / `EMAIL_PORT`
+/ `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` in `.env` and restart the
+server. Leave the user/password blank and email prints to the
+`runserver` console. Only used when `RESEND_API_KEY` isn't set, so this
+is what local dev uses.
 
 **Current dev setup:** Gmail SMTP (`smtp.gmail.com:587`) from an established
 Google account, using a 16-character **App Password**
@@ -1082,7 +1121,7 @@ Google account, using a 16-character **App Password**
 alias; brand-new Gmail accounts can be blocked from App Password use for
 24–72 hours.
 
-**Other providers** (Brevo, SMTP2GO, Mailjet, Resend, Mailgun) are a pure
+**Other SMTP providers** (Brevo, SMTP2GO, Mailjet, Mailgun) are a pure
 `.env` change, e.g. Brevo:
 
 ```
@@ -1092,7 +1131,7 @@ EMAIL_HOST_USER=<login from the provider>
 EMAIL_HOST_PASSWORD=<SMTP key>
 ```
 
-**Verify credentials** without sending:
+**Verify SMTP credentials** without sending:
 
 ```bash
 python -c "import os,smtplib; from dotenv import load_dotenv; load_dotenv('.env'); s=smtplib.SMTP(os.environ.get('EMAIL_HOST','smtp.gmail.com'), int(os.environ.get('EMAIL_PORT','587'))); s.starttls(); s.login(os.environ['EMAIL_HOST_USER'], os.environ['EMAIL_HOST_PASSWORD']); print('AUTH OK'); s.quit()"
