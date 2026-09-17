@@ -778,6 +778,29 @@ class JobMoneyTests(TestCase):
         self.assertEqual(self.job.total_refunded, Decimal("50.00"))
         self.assertEqual(self.job.balance_due, Decimal("850.00"))  # 1200-300-50
 
+    def test_owed_to_customer_is_none_while_balance_is_non_negative(self):
+        self.assertIsNone(self.job.owed_to_customer)
+        Payment.objects.create(
+            job=self.job, amount=self.job.agreed_price, kind=Payment.Kind.PART
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.balance_due, Decimal("0.00"))
+        self.assertIsNone(self.job.owed_to_customer)
+
+    def test_owed_to_customer_when_a_refund_exceeds_the_balance(self):
+        """A refund bigger than what's left (e.g. damage costing more than
+        the job) takes the balance negative - owed_to_customer surfaces
+        that as a plain positive "we owe them" figure."""
+        Payment.objects.create(
+            job=self.job, amount=Decimal("300.00"), kind=Payment.Kind.PART
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("1000.00"), kind=Payment.Kind.REFUND
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.balance_due, Decimal("-100.00"))  # 1200-300-1000
+        self.assertEqual(self.job.owed_to_customer, Decimal("100.00"))
+
     def test_open_refund_request_property(self):
         self.assertIsNone(self.job.open_refund_request)
         rr = RefundRequest.objects.create(
@@ -1693,6 +1716,39 @@ class StaffManageTests(TestCase):
         })
         self.job.refresh_from_db()
         self.assertEqual(self.job.total_refunded, Decimal("80"))  # second one rejected
+
+    def test_refund_exceeding_what_was_paid_needs_confirmation(self):
+        """A refund bigger than what's been paid (e.g. damage costing more
+        than the job) is a real scenario, not an error - it just needs the
+        confirmation box ticked rather than going through on a bare number,
+        since it means the balance goes negative (we now owe them)."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("300"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("150"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "200", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("0"))  # rejected, no checkbox
+
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "200", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "", "confirm_exceeds_paid": "on",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("200"))
+        self.assertEqual(self.job.balance_due, Decimal("-50"))
+        self.assertEqual(self.job.owed_to_customer, Decimal("50"))
+
+        resp = self.client.get(self._detail())
+        self.assertContains(resp, "We owe you")
 
     def test_staff_can_resolve_a_refund_request(self):
         rr = RefundRequest.objects.create(

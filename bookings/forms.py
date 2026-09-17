@@ -319,7 +319,21 @@ class RecordPaymentForm(forms.ModelForm):
     or a refund (kind=refund - typed as a normal positive amount, e.g. 50
     for £50 back). A refund is treated like store credit: it comes straight
     off the outstanding balance without touching the agreed price or the
-    paid-so-far figure (Job.total_refunded is what subtracts it)."""
+    paid-so-far figure (Job.total_refunded is what subtracts it).
+
+    A refund can exceed what's actually been paid (e.g. accidental damage
+    costing more than the job itself, per the Terms & Conditions) - that's
+    a real, legitimate scenario, not something to block outright. It just
+    needs a deliberate second confirmation rather than being one careless
+    typo away, since it means the balance goes negative - we now owe THEM.
+    This form only ever records that on the ledger; the actual money still
+    goes out manually (bank transfer / cash), same as any other refund.
+    """
+
+    confirm_exceeds_paid = forms.BooleanField(
+        required=False,
+        label="This is more than they've paid - I understand we'll now owe them the difference",
+    )
 
     def __init__(self, *args, job=None, **kwargs):
         self.job = job
@@ -344,11 +358,13 @@ class RecordPaymentForm(forms.ModelForm):
             and amount is not None and self.job is not None
         ):
             refundable = self.job.total_paid - self.job.total_refunded
-            if amount > refundable:
+            if amount > refundable and not cleaned.get("confirm_exceeds_paid"):
                 self.add_error(
                     "amount",
-                    f"Can't refund more than the £{refundable:.2f} still "
-                    "available to refund.",
+                    f"This is £{amount - refundable:.2f} more than the "
+                    f"£{refundable:.2f} they've paid so far. If that's "
+                    "right (e.g. damage cost more than the job), tick the "
+                    "confirmation box below and record it again.",
                 )
         return cleaned
 

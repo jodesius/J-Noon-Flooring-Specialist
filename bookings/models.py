@@ -427,6 +427,16 @@ class Job(models.Model):
         return self.agreed_price - self.total_paid - self.total_refunded
 
     @property
+    def owed_to_customer(self):
+        """A positive amount when a refund (e.g. for accidental damage that
+        cost more than the job itself) has taken the balance negative - we
+        now owe THEM, not the other way round. None when nothing's owed
+        either way, so templates can use it directly as a boolean."""
+        if self.balance_due is None or self.balance_due >= 0:
+            return None
+        return -self.balance_due
+
+    @property
     def deposit_paid(self):
         return self.payments.filter(kind=Payment.Kind.BOOKING_FEE).exists()
 

@@ -138,6 +138,8 @@ Context: job, confirm_form, payment_form, admin_url.
         <p>This job is marked complete.
             {% if job.balance_due and job.balance_due > 0 %}
                 <strong>&pound;{{ job.balance_due|floatformat:2 }}</strong> still outstanding.
+            {% elif job.owed_to_customer %}
+                You owe them <strong>&pound;{{ job.owed_to_customer|floatformat:2 }}</strong>.
             {% else %}Paid in full.{% endif %}
         </p>
         <form method="post" class="staff-form staff-form--inline">
@@ -172,6 +174,7 @@ Context: job, confirm_form, payment_form, admin_url.
             {% include "bookings/_field.html" with field=payment_form.method %}
             {% include "bookings/_field.html" with field=payment_form.received_on %}
             {% include "bookings/_field.html" with field=payment_form.reference %}
+            {% include "bookings/_field.html" with field=payment_form.confirm_exceeds_paid %}
             <div class="staff-form__actions">
                 <button type="submit" class="bk-btn bk-btn--primary">Record payment</button>
             </div>

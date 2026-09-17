@@ -48,7 +48,7 @@
                     <span class="job-card__meta">
                         {{ job.contact_name|default:job.user.get_username }}
                         {% if job.agreed_price %} &middot; &pound;{{ job.agreed_price|floatformat:0 }}{% endif %}
-                        {% if job.balance_due and job.balance_due > 0 %} &middot; &pound;{{ job.balance_due|floatformat:0 }} outstanding{% endif %}
+                        {% if job.balance_due and job.balance_due > 0 %} &middot; &pound;{{ job.balance_due|floatformat:0 }} outstanding{% elif job.owed_to_customer %} &middot; you owe &pound;{{ job.owed_to_customer|floatformat:0 }}{% endif %}
                         {% if job.start_date %} &middot; starts {{ job.start_date|date:"j M" }}{% endif %}
                     </span>
                 </a>

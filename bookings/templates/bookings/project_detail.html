@@ -103,12 +103,24 @@
                     {% if job.total_refunded %}
                         <tr><th>Refunded</th><td>&minus;&pound;{{ job.total_refunded|floatformat:2 }}</td></tr>
                     {% endif %}
-                    <tr class="job-money__due">
-                        <th>Balance outstanding</th>
-                        <td>&pound;{{ job.balance_due|floatformat:2 }}</td>
-                    </tr>
+                    {% if job.owed_to_customer %}
+                        <tr class="job-money__due">
+                            <th>We owe you</th>
+                            <td>&pound;{{ job.owed_to_customer|floatformat:2 }}</td>
+                        </tr>
+                    {% else %}
+                        <tr class="job-money__due">
+                            <th>Balance outstanding</th>
+                            <td>&pound;{{ job.balance_due|floatformat:2 }}</td>
+                        </tr>
+                    {% endif %}
                 </tbody>
             </table>
+            {% if job.owed_to_customer %}
+                <p class="bk-form__disclaimer">
+                    I'll be in touch to sort out getting this back to you.
+                </p>
+            {% endif %}
             {% if job.balance_due > 0 and job.is_live %}
                 {% if stripe_ready and not can_manage %}
                     <a class="bk-btn bk-btn--primary"
@@ -158,7 +170,8 @@
                 <p>
                     Refund requested on {{ job.open_refund_request.created_at|date:"j M Y" }}
                     &mdash; I'll be in touch to sort it out. Feel free to add more
-                    detail in the messages below too.
+                    detail &mdash; and photos, if it's about any damage &mdash; in
+                    the messages below too.
                 </p>
             {% else %}
                 <form method="post" action="{% url 'bookings:request_refund' slug=job.slug %}" class="bk-form">
