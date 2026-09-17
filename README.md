@@ -356,11 +356,20 @@ one consistent story regardless of how the money moved.
   card whenever there's been one, the job's Payments table shows it as
   `-£50.00` in red, and the PDF lists it as its own deduction alongside the
   payments. A refund can't exceed what's still available to refund (paid
-  so far, less anything already refunded) — so a second refund on the same
-  job correctly stacks against what's left, not the original total.
-  Recording it (with the method and a reference for your own bank's
-  transaction id if you want one noted) *is* the log of the money actually
-  leaving your account — there's nothing further to do.
+  so far, less anything already refunded) by default — so a second refund
+  on the same job correctly stacks against what's left, not the original
+  total — but it *can* go beyond that with a **confirmation checkbox**
+  ("this is more than they've paid - we'll now owe them the difference"),
+  for the accidental-damage scenario the Terms & Conditions cover, where
+  the repair cost exceeds the job's own value. When that happens, the
+  balance goes negative and every view that shows it says so plainly —
+  **"We owe you £X"** on the customer's Costs card, "You owe them £X" on
+  the staff panel and manage dashboard — rather than a confusing negative
+  number. Recording a refund also **auto-issues a Refund receipt**
+  (`Invoice.Kind.REFUND`), the same way a card payment auto-issues one, so
+  there's a paper trail on both sides without an extra manual step; the
+  PDF itself reads "We owe you £X" too when the balance goes negative,
+  instead of the old (and wrong, in that case) "Paid in full."
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
   or a **final invoice**, issued from the manage panel or an admin action.
   The letterhead carries the **company logo** (fetched once from Cloudinary,
@@ -373,10 +382,11 @@ one consistent story regardless of how the money moved.
   ledger and the totals are **frozen at issue** (`payments_snapshot` +
   `agreed_total` + `total_paid` + `total_refunded` on the `Invoice`) so a
   file downloaded today says the same thing next year. Invoices come in
-  three kinds — *Booking fee
+  four kinds — *Booking fee
   receipt*, *Payment receipt* (a mid-job statement with a balance still
-  showing), *Final invoice* — issued by hand from the manage panel **or
-  automatically after a card payment** (see below).
+  showing), *Final invoice*, *Refund receipt* — issued by hand from the
+  manage panel, **automatically after a card payment** (see below), or
+  **automatically after recording a refund**.
 - **Models** — `Job` (slug, auto reference `JN####`, optional `QuoteRequest`
   link, customer name / phone, address of works, agreed price, start date,
   status, notes; `booking_fee` is a computed 20% of the agreed price),
@@ -1299,7 +1309,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **220**, across `core`,
+tests where they add lasting value (currently **225**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.
@@ -1408,7 +1418,12 @@ hit from the test suite.
   the manage dashboard's badge and the nav's "N refund" pill both reflect
   the open count and disappear once resolved; an invoice snapshotted with a
   refund on the books keeps it separate from `total_paid` too, and the PDF
-  still renders fine with one in it. For **Stripe card
+  still renders fine with one in it; a refund exceeding what's been paid
+  is rejected without the confirmation checkbox but goes through with it,
+  correctly taking the balance negative and surfacing `owed_to_customer`;
+  and recording a refund auto-issues a Refund receipt invoice, which the
+  PDF renders correctly (as "We owe you", not "Paid in full") even when
+  the balance is negative. For **Stripe card
   payments** (SDK fully mocked — no real Stripe call from the suite): the
   "Pay now" buttons appear only with keys configured; starting a deposit
   payment creates a `CardPayment` + PaymentIntent and redirects to our

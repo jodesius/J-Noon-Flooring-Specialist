@@ -868,6 +868,23 @@ class InvoiceTests(TestCase):
         pdf = render_invoice_pdf(inv)
         self.assertTrue(pdf.startswith(b"%PDF"))
 
+    def test_pdf_renders_when_a_refund_takes_the_balance_negative(self):
+        """A refund bigger than what's been paid takes the invoice balance
+        negative - renders as "We owe you", not the old "Paid in full"
+        wording, which would have been actively wrong here."""
+        Payment.objects.create(
+            job=self.job, amount=Decimal("500.00"), kind=Payment.Kind.PART
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("2500.00"), kind=Payment.Kind.REFUND
+        )
+        inv = self._issue(kind=Invoice.Kind.REFUND)
+        self.assertLess(inv.balance, 0)
+        from bookings.invoices import render_invoice_pdf
+
+        pdf = render_invoice_pdf(inv)
+        self.assertTrue(pdf.startswith(b"%PDF"))
+
     def test_numbers_are_sequential(self):
         a = Invoice(job=self.job, kind=Invoice.Kind.DEPOSIT)
         a.snapshot_from_job()
@@ -1661,6 +1678,29 @@ class StaffManageTests(TestCase):
         self.assertEqual(self.job.total_paid, Decimal("700"))  # unchanged
         self.assertEqual(self.job.total_refunded, Decimal("50"))
         self.assertEqual(self.job.balance_due, balance_before - Decimal("50"))
+
+    def test_recording_a_refund_auto_issues_a_refund_receipt(self):
+        """A refund is a real transaction like any payment - it should
+        leave a paper trail (an Invoice), not just a ledger row."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.assertEqual(Invoice.objects.filter(job=self.job).count(), 0)
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "50", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        invoices = Invoice.objects.filter(job=self.job)
+        self.assertEqual(invoices.count(), 1)
+        invoice = invoices.first()
+        self.assertEqual(invoice.kind, Invoice.Kind.REFUND)
+        self.assertEqual(invoice.total_refunded, Decimal("50"))
+        self.assertTrue(invoice.line_items.exists())
 
     def test_a_second_refund_stacks_on_the_first(self):
         Job.objects.filter(pk=self.job.pk).update(

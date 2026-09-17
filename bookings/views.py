@@ -388,10 +388,21 @@ def _handle_job_action(request, job):
             payment.save()
             if payment.kind == Payment.Kind.REFUND:
                 job.refresh_from_db()
+                # A refund is a real transaction, same as any payment - it
+                # gets its own receipt so there's a paper trail for both
+                # sides, not just a ledger row nobody can point to.
+                invoice = Invoice(job=job, kind=Invoice.Kind.REFUND)
+                invoice.snapshot_from_job()
+                invoice.save()
+                invoice.ensure_default_line_item()
+                if job.owed_to_customer:
+                    balance_note = f"we now owe them £{job.owed_to_customer:.2f}"
+                else:
+                    balance_note = f"outstanding balance is now £{job.balance_due:.2f}"
                 messages.success(
                     request,
-                    f"£{payment.amount:.2f} refund recorded - outstanding "
-                    f"balance is now £{job.balance_due:.2f}.",
+                    f"£{payment.amount:.2f} refund recorded ({invoice.number}) - "
+                    f"{balance_note}.",
                 )
             else:
                 messages.success(request, f"£{payment.amount:.2f} payment recorded.")

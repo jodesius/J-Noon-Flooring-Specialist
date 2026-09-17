@@ -130,6 +130,7 @@ def render_invoice_pdf(invoice):
         invoice.Kind.DEPOSIT: "Booking fee receipt",
         invoice.Kind.RECEIPT: "Payment receipt",
         invoice.Kind.FINAL: "Invoice",
+        invoice.Kind.REFUND: "Refund receipt",
     }.get(invoice.kind, "Invoice")
 
     # ---- letterhead: name + contact on the left, logo on the right --------
@@ -213,12 +214,16 @@ def render_invoice_pdf(invoice):
         rows.append([Paragraph(desc, cell),
                      Paragraph("- " + _money(amount), cell_r)])
 
-    if invoice.kind in (invoice.Kind.FINAL, invoice.Kind.RECEIPT) and balance > 0:
-        balance_label = "Balance due"
+    if balance < 0:
+        # A refund exceeding what's been paid (e.g. accidental damage costing
+        # more than the job) - we owe them, not the other way round.
+        balance_label, balance_display = "We owe you", _money(-balance)
+    elif invoice.kind in (invoice.Kind.FINAL, invoice.Kind.RECEIPT) and balance > 0:
+        balance_label, balance_display = "Balance due", _money(balance)
     else:
-        balance_label = "Balance"
+        balance_label, balance_display = "Balance", _money(balance)
     rows.append([Paragraph("<b>%s</b>" % balance_label, cell),
-                 Paragraph("<b>%s</b>" % _money(balance), cell_r)])
+                 Paragraph("<b>%s</b>" % balance_display, cell_r)])
 
     table = Table(rows, colWidths=[doc.width - 32 * mm, 32 * mm])
     style = [
@@ -239,7 +244,12 @@ def render_invoice_pdf(invoice):
     if invoice.kind == invoice.Kind.DEPOSIT:
         totals_note = ("Thank you - your booking fee is paid and your booking is "
                        "secured. It's non-refundable and comes off your final invoice.")
-    elif balance <= 0:
+    elif balance < 0:
+        totals_note = (
+            f"This refund takes you into credit by {_money(-balance)} - "
+            "I'll be in touch to sort out getting that back to you."
+        )
+    elif balance == 0:
         totals_note = "Paid in full - thank you."
     elif invoice.kind == invoice.Kind.RECEIPT:
         totals_note = ("Thank you - this payment is recorded against your job. "

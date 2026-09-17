@@ -645,6 +645,7 @@ class Invoice(models.Model):
         DEPOSIT = "deposit", "Booking fee receipt"
         RECEIPT = "receipt", "Payment receipt"
         FINAL = "final", "Final invoice"
+        REFUND = "refund", "Refund receipt"
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="invoices")
     number = models.CharField(max_length=16, unique=True, editable=False, blank=True)
