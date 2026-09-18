@@ -192,12 +192,26 @@ Dependencies are pinned in `requirements.txt`.
 - **The rate card is admin data.** `QuoteSettings.rate_card` is a single
   free-text field (seeded with J-Noon's real prices — labour rates, pattern
   floors, subfloor prep, a flat **£50 to lift the old flooring**, **£1/m
-  beading** and **£5 per door trim**, how materials work for supply & fit);
-  the AI reads it verbatim. `QuoteSettings`
+  beading**, **£1/m mastic edge sealant** (LVT/vinyl wet-area edges — added
+  2026-09-18) and **£5 per door trim**, how materials work for supply &
+  fit); the AI reads it verbatim. `QuoteSettings`
   also holds a free-text rules box, an estimate-headroom %, and a master
   on/off switch. `FlooringRate` is just the picklist of systems on the form.
   The fitter edits the rate card in the admin — no code, no redeploy — and
   the AI always quotes from it.
+- **The AI reasons like a fitter, not a form.** `bookings/quoting.py`'s
+  `FLOORING_KNOWLEDGE` block (hardcoded — this is stable trade knowledge,
+  not a business setting to tweak, unlike the rate card) explains how each
+  system actually works: concrete vs timber subfloor prep, when a DPM or
+  underlay is needed (and when it isn't — LVT/Amtico/vinyl don't use
+  underlay at all), what needs mastic vs beading vs gripper rod, ramping/
+  threshold transitions when floor heights differ, screeding, herringbone's
+  extra wastage, and underfloor-heating suitability. The system prompt's
+  rules explicitly tell the model to use this to explain *why* — even on a
+  `need_info` or `refer_to_call` outcome, `customer_message` should still
+  carry real advice ("a wet room needs mastic at the edges so water can't
+  get underneath", "timber under LVT usually needs a ply overlay first"),
+  not just "I can't quote this, book a call."
 - **Lifting the old floor:** when the customer wants the old flooring taken
   up, the AI adds the £50 charge *and* tells them in plain words that they
   need to provide their own skip or bins for the waste — J-Noon lifts and
