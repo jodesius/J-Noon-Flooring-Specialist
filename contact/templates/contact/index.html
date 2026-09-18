@@ -69,32 +69,39 @@
             </p>
         </div>
 
-        {# ----- Right: coverage map ----- #}
-        <div class="contact-card contact-map-card">
-            <div id="coverage-map" class="contact-map"
-                 data-radius="{{ contact.radius_miles }}"
-                 data-tile-key="{{ geoapify_key }}"></div>
-            <p class="contact-map-card__note">
-                The shaded circle is roughly our {{ contact.radius_miles }}-mile coverage
-                from Chelmsford town centre. Just outside it? Ask anyway.
-            </p>
-            <img class="contact-map-card__logo"
-                 src="https://res.cloudinary.com/ddmslr9na/image/upload/f_auto,q_auto,w_700/v1788896276/ChatGPT_Image_Sep_8_2026_08_34_05_PM-_ycy2tz.webp"
-                 alt="J-Noon Flooring Specialist - luxury carpets, carpet tiles, laminate, Amtico, screeding, sub floor prep"
-                 loading="lazy">
-        </div>
+        {% comment %}
+            Right column: coverage map, then the availability calendar
+            stacked under it - its own flex column so its height is
+            independent of the (usually taller) details card on the
+            left, rather than both being forced to the same grid row
+            height.
+        {% endcomment %}
+        <div class="contact-right-col">
+            <div class="contact-card contact-map-card">
+                <div id="coverage-map" class="contact-map"
+                     data-radius="{{ contact.radius_miles }}"
+                     data-tile-key="{{ geoapify_key }}"></div>
+                <p class="contact-map-card__note">
+                    The shaded circle is roughly our {{ contact.radius_miles }}-mile coverage
+                    from Chelmsford town centre. Just outside it? Ask anyway.
+                </p>
+                <img class="contact-map-card__logo"
+                     src="https://res.cloudinary.com/ddmslr9na/image/upload/f_auto,q_auto,w_700/v1788896276/ChatGPT_Image_Sep_8_2026_08_34_05_PM-_ycy2tz.webp"
+                     alt="J-Noon Flooring Specialist - luxury carpets, carpet tiles, laminate, Amtico, screeding, sub floor prep"
+                     loading="lazy">
+            </div>
 
-        {# ----- Right, below the map: availability calendar ----- #}
-        <div class="contact-card contact-availability-card">
-            <h2>Availability</h2>
-            <div id="availability-calendar" class="availability-cal"
-                 data-booked="{{ booked_dates_json }}"></div>
-            <p class="availability-cal__legend">
-                <span class="availability-cal__swatch availability-cal__swatch--booked" aria-hidden="true"></span>
-                Booked
-                <span class="availability-cal__swatch" aria-hidden="true"></span>
-                Free
-            </p>
+            <div class="contact-card contact-availability-card">
+                <h2>Availability</h2>
+                <div id="availability-calendar" class="availability-cal"
+                     data-booked="{{ booked_dates_json }}"></div>
+                <p class="availability-cal__legend">
+                    <span class="availability-cal__swatch availability-cal__swatch--booked" aria-hidden="true"></span>
+                    Booked
+                    <span class="availability-cal__swatch" aria-hidden="true"></span>
+                    Free
+                </p>
+            </div>
         </div>
     </div>
 
