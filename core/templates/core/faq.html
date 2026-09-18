@@ -1,0 +1,51 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | FAQ{% endblock %}
+{% block meta_description %}Answers to common questions about booking a job, refunds and payments, plus a guide to flooring materials - what gripper rod, underlay, beading and screeding actually are, and how to measure your room.{% endblock %}
+
+{% block body_class %}page-faq{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'core/css/faq.css' %}">
+{% endblock %}
+
+{% block content %}
+<article class="faq-page">
+    <h1>Frequently Asked Questions</h1>
+    <p class="faq-page__intro">
+        Everything from how booking and refunds work on this site, to a plain-English
+        guide to flooring materials and the terms you'll hear along the way. Click a
+        question to open it.
+    </p>
+
+    {% if groups %}
+        <nav class="faq-jump" aria-label="Jump to a section">
+            {% for group in groups %}
+                <a href="#{{ group.label|slugify }}">{{ group.label }}</a>
+            {% endfor %}
+        </nav>
+
+        {% for group in groups %}
+            <section class="faq-group" id="{{ group.label|slugify }}">
+                <h2>{{ group.label }}</h2>
+                {% for item in group.items %}
+                    <details class="faq-item">
+                        <summary>{{ item.question }}</summary>
+                        <div class="faq-item__answer">{{ item.answer|linebreaks }}</div>
+                    </details>
+                {% endfor %}
+            </section>
+        {% endfor %}
+    {% else %}
+        <p>Nothing here yet - check back soon.</p>
+    {% endif %}
+
+    <p class="faq-page__footer">
+        Can't find what you're after?
+        <a href="{% url 'contact:index' %}">Get in touch</a> and I'll help directly.
+    </p>
+</article>
+
+<script type="application/ld+json">{{ faq_jsonld|safe }}</script>
+{% endblock %}

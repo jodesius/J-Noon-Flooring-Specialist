@@ -8,6 +8,8 @@ from django.urls import reverse
 
 from bookings.models import Job, Payment, RefundRequest
 
+from .models import FAQItem
+
 User = get_user_model()
 
 
@@ -298,4 +300,62 @@ class LegalPageTests(TestCase):
     def test_footer_links_to_both_on_any_page(self):
         resp = self.client.get(reverse("core:home"))
         self.assertContains(resp, reverse("core:privacy"))
+
+
+class FAQPageTests(TestCase):
+    """The /faq/ page - migration 0002 seeds real content, so these tests
+    exercise that seeded data directly rather than building fixtures from
+    scratch, same as they'll actually appear on the live site."""
+
+    def test_page_renders_with_seeded_content(self):
+        resp = self.client.get(reverse("core:faq"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Frequently Asked Questions")
+        self.assertContains(resp, "What is gripper rod?")
+        self.assertContains(resp, "Using this site")
+        self.assertContains(resp, "Screeding &amp; floor prep")
+
+    def test_nav_links_to_faq_from_another_page(self):
+        resp = self.client.get(reverse("core:home"))
+        self.assertContains(resp, reverse("core:faq"))
+
+    def test_inactive_item_is_hidden(self):
+        item = FAQItem.objects.filter(category="carpet").first()
+        item.is_active = False
+        item.save()
+        resp = self.client.get(reverse("core:faq"))
+        self.assertNotContains(resp, item.question)
+
+    def test_empty_category_is_not_shown_as_a_heading(self):
+        FAQItem.objects.filter(category="vinyl").update(is_active=False)
+        resp = self.client.get(reverse("core:faq"))
+        self.assertNotContains(resp, ">Vinyl<")
+
+    def test_jsonld_block_matches_active_items(self):
+        FAQItem.objects.filter(category="amtico").update(is_active=False)
+        resp = self.client.get(reverse("core:faq"))
+        blocks = re.findall(
+            r'<script type="application/ld\+json">(.*?)</script>',
+            resp.content.decode(), re.S,
+        )
+        faq_blocks = [b for b in blocks if '"FAQPage"' in b]
+        self.assertEqual(len(faq_blocks), 1)
+        data = json.loads(faq_blocks[0])
+        self.assertEqual(data["@type"], "FAQPage")
+        active_count = FAQItem.objects.filter(is_active=True).count()
+        self.assertEqual(len(data["mainEntity"]), active_count)
+        questions = {q["name"] for q in data["mainEntity"]}
+        self.assertIn("What is gripper rod?", questions)
+        self.assertNotIn(
+            "What is Amtico, and how's it different from standard LVT?",
+            questions,
+        )
+
+    def test_jsonld_escapes_a_stray_script_tag_in_the_content(self):
+        FAQItem.objects.create(
+            category="site", question="Safe?</script><script>alert(1)",
+            answer="Yes.",
+        )
+        resp = self.client.get(reverse("core:faq"))
+        self.assertNotContains(resp, "</script><script>alert(1)")
         self.assertContains(resp, reverse("core:terms"))

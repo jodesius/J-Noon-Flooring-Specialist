@@ -2,6 +2,9 @@ from django.shortcuts import render
 
 from reviews.models import Review
 
+from .models import FAQItem
+from .structured_data import faq_page_jsonld
+
 # Latest approved reviews shown in the home page "Reviews" section.
 HOME_REVIEW_COUNT = 6
 
@@ -20,6 +23,19 @@ def privacy(request):
 
 def terms(request):
     return render(request, "core/terms.html")
+
+
+def faq(request):
+    all_items = list(FAQItem.objects.filter(is_active=True))
+    groups = []
+    for value, label in FAQItem.Category.choices:
+        group_items = [item for item in all_items if item.category == value]
+        if group_items:
+            groups.append({"label": label, "items": group_items})
+    return render(request, "core/faq.html", {
+        "groups": groups,
+        "faq_jsonld": faq_page_jsonld(all_items),
+    })
 
 
 def robots_txt(request):

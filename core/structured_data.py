@@ -58,9 +58,33 @@ def local_business_jsonld(request, contact):
     if same_as:
         data["sameAs"] = same_as
 
+    return _safe_json(data)
+
+
+def faq_page_jsonld(items):
+    """A schema.org FAQPage block for the FAQ page - built from the same
+    `FAQItem` queryset the page renders, so it can never drift out of sync
+    with what's actually on the page. Google can show these as rich
+    results directly in search."""
+    data = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": item.question,
+                "acceptedAnswer": {"@type": "Answer", "text": item.answer},
+            }
+            for item in items
+        ],
+    }
+    return _safe_json(data)
+
+
+def _safe_json(data):
     # Escape the same way Django's json_script filter does, so a stray
-    # "</script>" inside any admin-edited text field (intro, service area)
-    # can never break out of the tag.
+    # "</script>" inside any admin-edited text field can never break out
+    # of the tag.
     return (
         json.dumps(data)
         .replace("<", "\\u003C")

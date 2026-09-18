@@ -124,6 +124,24 @@ Dependencies are pinned in `requirements.txt`.
   pages at `/privacy/` and `/terms/`, linked from the footer on every page,
   the registration form, the contact form, and the card-checkout
   authorisation. See [Security](#security) for how consent is recorded.
+- **FAQ** (`/faq/`, linked from the main nav) — an accordion-style page
+  covering two very different things: **using the site** (booking,
+  refunds — including the Credit-vs-real-money distinction, call-backs,
+  payments, invoices) and a **flooring know-how glossary**, grouped to
+  match the home page's own systems (Laminate, LVT, Amtico, Engineered &
+  Solid Wood, Vinyl, Carpet & Carpet Tiles, Screeding & Floor Prep) plus a
+  "Measuring your room" section — what gripper rod, beading, mastic, a
+  DPM and screeding actually are, drying times, acclimatisation, and so
+  on. Content lives in a real `FAQItem` model (category, question,
+  answer, `is_active`, `sort_order`), managed entirely from the admin —
+  not hardcoded — so Joseph can add, edit or reorder questions himself
+  without a code change. Seeded with 44 starting entries by a data
+  migration (`core/migrations/0002_seed_faq_items.py`) as a first draft
+  for review, not gospel — some of the trade specifics (exact drying
+  times etc.) are worth checking against how the job's actually done.
+  The page also emits a schema.org `FAQPage` JSON-LD block built from the
+  same active items it renders (so it can't drift out of sync), which
+  Google can show as rich results in search.
 
 ### Bookings (`bookings`)
 
@@ -1344,7 +1362,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **244**, across `core`,
+tests where they add lasting value (currently **250**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

@@ -1,0 +1,105 @@
+/* ============================================================
+   FAQ page - a jump-nav, then per-category accordions.
+   Shares the "document" feel of legal.css but with expandable items.
+   ============================================================ */
+
+.faq-page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+    line-height: 1.6;
+}
+
+.faq-page h1 {
+    color: var(--wood-header);
+    margin-bottom: 0.25rem;
+}
+
+.faq-page__intro {
+    color: #2b2b2b;
+    margin-bottom: 1.5rem;
+}
+
+.faq-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    background: #f7f2ec;
+    border: 1px solid #e3d9cc;
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 2rem;
+}
+
+.faq-jump a {
+    color: var(--wood-header);
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: #fff;
+    border: 1px solid #e3d9cc;
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+}
+
+.faq-jump a:hover { background: #efe6da; }
+
+.faq-group {
+    margin-top: 2.25rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e3d9cc;
+}
+
+.faq-group:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
+.faq-group h2 {
+    color: var(--wood-header);
+    margin-bottom: 0.9rem;
+}
+
+.faq-item {
+    border: 1px solid #e3d9cc;
+    border-radius: 8px;
+    background: #fdfbf9;
+    margin-bottom: 0.6rem;
+    padding: 0;
+}
+
+.faq-item summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #3f3a35;
+    padding: 0.8rem 1rem;
+    list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker { display: none; }
+
+.faq-item summary::before {
+    content: "+";
+    display: inline-block;
+    width: 1.1em;
+    color: var(--wood-header);
+    font-weight: 700;
+}
+
+.faq-item[open] summary::before { content: "\2212"; }
+
+.faq-item__answer {
+    padding: 0 1.1rem 1rem 2.3rem;
+    color: #2b2b2b;
+}
+
+.faq-item__answer p:first-child { margin-top: 0; }
+.faq-item__answer p:last-child { margin-bottom: 0; }
+
+.faq-page__footer {
+    margin-top: 2.5rem;
+    color: #6b6b6b;
+}
+
+.faq-page__footer a { color: var(--wood-header); }
