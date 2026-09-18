@@ -620,12 +620,27 @@ Postcard-style customer reviews with **full CRUD**, gated by admin approval.
   Policy** (a required checkbox linking to both) — the exact moment of
   acceptance is recorded on the account (`User.terms_accepted_at`), not
   just implied by the checkbox having been ticked.
+- **Registering logs you straight in** — no separate trip to the login
+  page to retype the credentials you just typed.
 - **Show / hide password** toggle on the registration, login and
   set-new-password forms.
 - **Email verification**: a signed, time-limited link is sent at
-  registration (and re-sendable from the profile page). The profile shows a
-  **Verified / Unverified** badge. The link is token-only, so it works from
-  any device without logging in.
+  registration, and is re-sendable any time from the profile page — a
+  **"Verify now"** pill button sits right where the "Verified" badge
+  would go once it's confirmed, so a missed or lost email isn't a dead
+  end. The link is token-only, so it works from any device without
+  logging in.
+  **Visiting the link only ever shows a "Verify my email" confirm
+  button — it never verifies anything by itself.** Found necessary
+  2026-09-18 after a real user's iPhone (Mail app's built-in link
+  prefetching, a well-documented class of issue) silently used up a
+  GET-does-everything link before she ever tapped it, and her real tap
+  landed on Django's own bare CSRF error page as a side effect. Now the
+  GET only checks the token and renders a page; only a genuine POST (an
+  actual click on the button, by which point cookies/CSRF are already
+  correctly set up from that same page load) marks the email verified.
+  A prefetcher can fetch the page all it likes without burning through
+  the one-time link.
 - **Profile**: display name (username), profile image, pronouns, contact
   phone and email, an "about me" section, and social links
   (Facebook, Instagram, LinkedIn, website). One profile per user, created
@@ -1401,7 +1416,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **265**, across `core`,
+tests where they add lasting value (currently **273**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

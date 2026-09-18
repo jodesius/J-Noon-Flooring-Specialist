@@ -83,12 +83,15 @@ def register_view(request):
         if form.is_valid():
             user = form.save()
             _send_verification_email(request, user)
+            user.backend = "django.contrib.auth.backends.ModelBackend"
+            login(request, user)
             messages.success(
                 request,
-                "Account created. We've emailed you a link to verify your "
-                "email address - you can log in now and verify any time.",
+                "Account created - you're logged in. We've emailed you a "
+                "link to verify your email address - you can do that any "
+                "time from your profile.",
             )
-            return redirect("accounts:login")
+            return redirect("core:home")
     else:
         form = RegisterForm()
 
@@ -160,13 +163,21 @@ def send_verification_email(request):
 
 
 def verify_email(request, uidb64, token):
+    """GET just checks the link and shows a "confirm" button - it never
+    changes anything by itself, so an email client or security scanner
+    silently prefetching the link can't burn through it before the
+    person actually gets there. Only a POST (a real click on that
+    button) actually verifies the address."""
     try:
         uid = force_str(urlsafe_base64_decode(uidb64))
         user = User.objects.get(pk=uid)
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
         user = None
 
-    if user is not None and email_verification_token.check_token(user, token):
+    if user is None or not email_verification_token.check_token(user, token):
+        return render(request, "accounts/email_verification_invalid.html", status=400)
+
+    if request.method == "POST":
         if not user.email_verified:
             user.email_verified = True
             user.save(update_fields=["email_verified"])
@@ -175,7 +186,9 @@ def verify_email(request, uidb64, token):
             return redirect("accounts:profile")
         return redirect("accounts:login")
 
-    return render(request, "accounts/email_verification_invalid.html", status=400)
+    return render(request, "accounts/email_verification_confirm.html", {
+        "uidb64": uidb64, "token": token,
+    })
 
 
 @login_required

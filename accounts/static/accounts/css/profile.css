@@ -37,15 +37,16 @@
     margin: 0;
 }
 
-.profile__verify-btn {
-    background: none;
+.badge--button {
     border: 0;
-    padding: 0;
     font: inherit;
-    color: #ffffff;
-    text-decoration: underline;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     cursor: pointer;
 }
+
+.badge--button:hover { filter: brightness(0.95); }
 
 .badge {
     display: inline-block;

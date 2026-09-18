@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+{% load static %}
+
+{% block title %}J-Noon Flooring Specialist | Verify your email{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block body_class %}page-password-reset{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'accounts/css/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="auth">
+    <h1>Verify your email</h1>
+
+    <div class="auth__form">
+        <p>Confirm you'd like to verify this email address.</p>
+    </div>
+
+    <form method="post"
+          action="{% url 'accounts:verify_email' uidb64=uidb64 token=token %}">
+        {% csrf_token %}
+        <button type="submit" class="auth__submit">Verify my email</button>
+    </form>
+
+    <p class="auth__aside">
+        <a href="{% url 'accounts:login' %}">Go to login</a>
+    </p>
+</div>
+{% endblock %}

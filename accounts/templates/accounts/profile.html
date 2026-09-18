@@ -21,10 +21,9 @@
         {% if user.email_verified %}
             <span class="badge badge--verified">Verified</span>
         {% else %}
-            <span class="badge badge--unverified">Unverified</span>
-            <form method="post" action="{% url 'accounts:send_verification' %}">
+            <form method="post" action="{% url 'accounts:send_verification' %}" class="profile__verify-form">
                 {% csrf_token %}
-                <button type="submit" class="profile__verify-btn">Send verification email</button>
+                <button type="submit" class="badge badge--unverified badge--button">Verify now</button>
             </form>
         {% endif %}
     </div>
