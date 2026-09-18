@@ -68,17 +68,20 @@ class SiteContactModelTests(TestCase):
         self.assertIn("placehold", SiteContact.load().photo_url)
 
 
-class AvailabilityOnContactPageTests(TestCase):
-    """The "Availability" line on Contact us - computed automatically from
-    booked Job rows (bookings.models.Job.next_available_date), not set by
-    hand. See bookings/tests.py for the computation itself; this just
-    checks the Contact page actually shows it."""
+class AvailabilityCalendarTests(TestCase):
+    """The availability calendar on Contact us - replaced the old single
+    "Next available" line (bookings.models.Job.next_available_date, since
+    removed) because a gap between two booked jobs was showing as
+    unavailable too. See bookings/tests.py::BookedDatesTests for the
+    underlying computation; this just checks the page wires the result
+    into the calendar's data attribute correctly."""
 
-    def test_shows_available_now_with_nothing_booked(self):
+    def test_calendar_present_with_no_booked_dates(self):
         resp = self.client.get(reverse("contact:index"))
-        self.assertContains(resp, "Available now")
+        self.assertContains(resp, 'id="availability-calendar"')
+        self.assertContains(resp, 'data-booked="[]"')
 
-    def test_shows_next_available_once_a_job_is_booked(self):
+    def test_calendar_data_includes_a_booked_jobs_dates(self):
         from django.contrib.auth import get_user_model
 
         from bookings.models import Job
@@ -90,12 +93,15 @@ class AvailabilityOnContactPageTests(TestCase):
         start = timezone.localdate() + timedelta(days=5)
         Job.objects.create(
             user=user, title="Hall LVT", status=Job.Status.NOT_STARTED,
-            agreed_price=500, start_date=start,
+            agreed_price=500, start_date=start, duration_days=2,
         )
         resp = self.client.get(reverse("contact:index"))
+        self.assertContains(resp, start.isoformat())
+        self.assertContains(resp, (start + timedelta(days=1)).isoformat())
+
+    def test_availability_line_is_gone_from_the_info_card(self):
+        resp = self.client.get(reverse("contact:index"))
         self.assertNotContains(resp, "Available now")
-        self.assertContains(resp, "Next available")
-        self.assertContains(resp, (start + timedelta(days=3)).strftime("%Y"))
 
 
 @LOCMEM_MAIL

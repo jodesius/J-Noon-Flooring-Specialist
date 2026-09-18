@@ -207,8 +207,8 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
     {
-        # Project rule: 6-12 chars, at least one number and one special char.
-        'NAME': 'accounts.validators.SixToTwelvePasswordValidator',
+        # Project rule: 6-18 chars, at least one number and one special char.
+        'NAME': 'accounts.validators.SixToEighteenPasswordValidator',
     },
 ]
 

@@ -501,28 +501,31 @@ class Job(models.Model):
             self.save(update_fields=["status", "updated_at"])
 
     @classmethod
-    def next_available_date(cls):
-        """None if free right now, else the day this business is next free
-        - the day after the latest currently-booked job (not started yet,
-        or underway) is expected to finish. Each job's finish is
-        start_date + duration_days (default 3, overridable per job for a
-        bigger one) - a rough automatic estimate, not a real calendar, so
-        a job that's still `underway` always counts as at least until
-        tomorrow even if its own estimate has technically already passed
-        (it's demonstrably not finished)."""
+    def booked_dates(cls, within_days=180):
+        """Every individual date blocked by a currently-booked job (not
+        started yet, or underway) within the next `within_days` days - each
+        job blocks `start_date` through `start_date + duration_days - 1`
+        inclusive (duration_days defaults to 3, bumped up per job for a
+        bigger one when it's confirmed). Powers the visual availability
+        calendar - unlike the single "next available date" this replaced,
+        a gap between two booked jobs correctly shows as free rather than
+        the whole span in between looking blocked."""
         today = timezone.localdate()
-        latest_end = None
+        horizon = today + dt.timedelta(days=within_days)
+        dates = set()
         jobs = cls.objects.filter(
             status__in=[cls.Status.NOT_STARTED, cls.Status.UNDERWAY],
             start_date__isnull=False,
         )
         for job in jobs:
-            end = job.start_date + dt.timedelta(days=job.duration_days)
-            if end <= today:
-                end = today + dt.timedelta(days=1)
-            if latest_end is None or end > latest_end:
-                latest_end = end
-        return latest_end
+            end = job.start_date + dt.timedelta(days=job.duration_days - 1)
+            start = max(job.start_date, today)
+            end = min(end, horizon)
+            d = start
+            while d <= end:
+                dates.add(d)
+                d += dt.timedelta(days=1)
+        return dates
 
 
 # ---- work photos ---------------------------------------------------------

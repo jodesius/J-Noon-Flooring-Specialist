@@ -1,3 +1,5 @@
+import json
+
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
@@ -77,6 +79,8 @@ def index(request):
 
     from bookings.models import Job
 
+    booked_dates = sorted(d.isoformat() for d in Job.booked_dates())
+
     return render(
         request,
         "contact/index.html",
@@ -84,6 +88,6 @@ def index(request):
             "contact": contact,
             "form": form,
             "geoapify_key": settings.GEOAPIFY_API_KEY,
-            "next_available": Job.next_available_date(),
+            "booked_dates_json": json.dumps(booked_dates),
         },
     )

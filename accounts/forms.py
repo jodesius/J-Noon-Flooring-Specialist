@@ -22,7 +22,7 @@ class RegisterForm(forms.ModelForm):
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
         help_text=(
-            "6 to 12 characters, with at least one number and one special "
+            "6 to 18 characters, with at least one number and one special "
             "character."
         ),
     )

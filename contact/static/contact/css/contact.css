@@ -162,6 +162,91 @@
 .leaflet-top,
 .leaflet-bottom { z-index: 5; }
 
+/* ---------- Availability calendar - sits under the map card, in the
+   same (right) column, filling the gap left by the shorter map/logo
+   card next to the taller details card on wide screens ---------- */
+.contact-availability-card { grid-column: 2; }
+
+.availability-cal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.7rem;
+}
+.availability-cal__month {
+    font-weight: 700;
+    color: #5a3b28;
+}
+.availability-cal__nav {
+    background: none;
+    border: 1px solid #d9cdbd;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    color: #5a3b28;
+    cursor: pointer;
+}
+.availability-cal__nav:hover { background: #f6f1ea; }
+.availability-cal__nav[disabled] { opacity: 0.35; cursor: default; }
+.availability-cal__nav[disabled]:hover { background: none; }
+
+.availability-cal__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    text-align: center;
+}
+.availability-cal__weekday {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #8a7c6c;
+    text-transform: uppercase;
+    padding-bottom: 0.3rem;
+}
+.availability-cal__day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: #3f3a35;
+}
+.availability-cal__day--blank { visibility: hidden; }
+.availability-cal__day--past { color: #c9bfb2; }
+.availability-cal__day--today {
+    border: 2px solid #8b4b07;
+    font-weight: 700;
+}
+.availability-cal__day--booked {
+    background: #f3d9d9;
+    color: #8a3a3a;
+    font-weight: 600;
+}
+
+.availability-cal__legend {
+    margin: 0.9rem 0 0;
+    font-size: 0.78rem;
+    color: #6b6b6b !important;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.availability-cal__swatch {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    background: #fdfbf9;
+    border: 1px solid #d9cdbd;
+    margin-left: 0.5rem;
+}
+.availability-cal__swatch:first-child { margin-left: 0; }
+.availability-cal__swatch--booked { background: #f3d9d9; border-color: #e0b6b6; }
+
 /* ---------- Enquiry form ---------- */
 .contact-form {
     display: flex;
@@ -240,6 +325,7 @@
 /* tablet: the photo + details side-by-side columns become one stack */
 @media (max-width: 820px) {
     .contact-top { grid-template-columns: 1fr; }
+    .contact-availability-card { grid-column: 1; }
 }
 /* small phones: full-width submit button */
 @media (max-width: 520px) {

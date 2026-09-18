@@ -278,9 +278,7 @@ def book(request):
     form.fields["site_address"].widget.attrs["data-geoapify-key"] = (
         settings.GEOAPIFY_API_KEY
     )
-    return render(request, "bookings/book.html", {
-        "form": form, "next_available": Job.next_available_date(),
-    })
+    return render(request, "bookings/book.html", {"form": form})
 
 
 # ==========================================================================

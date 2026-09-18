@@ -55,14 +55,6 @@
                         <span>{{ contact.response_time }}</span>
                     </li>
                 {% endif %}
-                <li>
-                    <span class="contact-details__label">Availability</span>
-                    {% if next_available %}
-                        <span>Next available {{ next_available|date:"j F Y" }}</span>
-                    {% else %}
-                        <span>Available now</span>
-                    {% endif %}
-                </li>
             </ul>
 
             {% if contact.facebook or contact.instagram %}
@@ -90,6 +82,19 @@
                  src="https://res.cloudinary.com/ddmslr9na/image/upload/f_auto,q_auto,w_700/v1788896276/ChatGPT_Image_Sep_8_2026_08_34_05_PM-_ycy2tz.webp"
                  alt="J-Noon Flooring Specialist - luxury carpets, carpet tiles, laminate, Amtico, screeding, sub floor prep"
                  loading="lazy">
+        </div>
+
+        {# ----- Right, below the map: availability calendar ----- #}
+        <div class="contact-card contact-availability-card">
+            <h2>Availability</h2>
+            <div id="availability-calendar" class="availability-cal"
+                 data-booked="{{ booked_dates_json }}"></div>
+            <p class="availability-cal__legend">
+                <span class="availability-cal__swatch availability-cal__swatch--booked" aria-hidden="true"></span>
+                Booked
+                <span class="availability-cal__swatch" aria-hidden="true"></span>
+                Free
+            </p>
         </div>
     </div>
 
@@ -155,4 +160,5 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
             defer></script>
     <script src="{% static 'contact/js/contact.js' %}" defer></script>
+    <script src="{% static 'contact/js/availability_calendar.js' %}" defer></script>
 {% endblock %}

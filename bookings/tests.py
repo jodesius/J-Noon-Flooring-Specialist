@@ -618,20 +618,6 @@ class BookJobTests(TestCase):
         self.assertContains(resp, "Sending your booking request")
         self.assertContains(resp, "form_loading.js")
 
-    def test_shows_available_now_with_nothing_booked(self):
-        resp = self.client.get(reverse("bookings:book"))
-        self.assertContains(resp, "Available now")
-
-    def test_shows_next_available_once_a_job_is_booked(self):
-        start = timezone.localdate() + timezone.timedelta(days=5)
-        Job.objects.create(
-            user=make_user("other"), title="Kitchen",
-            status=Job.Status.NOT_STARTED, agreed_price=500, start_date=start,
-        )
-        resp = self.client.get(reverse("bookings:book"))
-        self.assertNotContains(resp, "Available now")
-        self.assertContains(resp, "Next available")
-
     def test_post_creates_requested_job_and_emails(self):
         resp = self.client.post(reverse("bookings:book"), self._payload())
         self.assertRedirects(resp, reverse("bookings:projects"))
@@ -943,45 +929,47 @@ class JobMoneyTests(TestCase):
         self.assertEqual(self.job.status, Job.Status.UNDERWAY)
 
 
-class NextAvailableDateTests(TestCase):
-    """Job.next_available_date() - computed automatically from what's
-    actually booked, instead of a date set (and forgotten) by hand."""
+class BookedDatesTests(TestCase):
+    """Job.booked_dates() - the individual calendar days blocked by what's
+    actually booked, replacing the single "next available date" the user
+    found misleading (a gap between two booked jobs was showing as
+    blocked too, since that only tracked the latest end date)."""
 
-    def test_none_with_nothing_booked(self):
-        self.assertIsNone(Job.next_available_date())
+    def test_empty_with_nothing_booked(self):
+        self.assertEqual(Job.booked_dates(), set())
 
-    def test_a_future_booked_job_uses_start_plus_duration(self):
+    def test_a_booked_job_blocks_exactly_its_own_days(self):
         start = timezone.localdate() + timezone.timedelta(days=5)
         Job.objects.create(
             user=make_user(), title="Kitchen", status=Job.Status.NOT_STARTED,
-            agreed_price=500, start_date=start,
+            agreed_price=500, start_date=start, duration_days=3,
         )
-        self.assertEqual(Job.next_available_date(), start + timezone.timedelta(days=3))
+        expected = {start, start + timezone.timedelta(days=1),
+                    start + timezone.timedelta(days=2)}
+        self.assertEqual(Job.booked_dates(), expected)
 
-    def test_a_longer_job_uses_its_own_duration_override(self):
-        start = timezone.localdate() + timezone.timedelta(days=5)
-        Job.objects.create(
-            user=make_user(), title="Whole house", status=Job.Status.NOT_STARTED,
-            agreed_price=5000, start_date=start, duration_days=10,
-        )
-        self.assertEqual(Job.next_available_date(), start + timezone.timedelta(days=10))
-
-    def test_the_latest_of_several_booked_jobs_wins(self):
+    def test_a_gap_between_two_booked_jobs_is_not_blocked(self):
+        """The exact bug the user found: a job booked 2 weeks out shouldn't
+        make the days between now and then look unavailable too."""
         today = timezone.localdate()
+        near = today + timezone.timedelta(days=2)
+        far = today + timezone.timedelta(days=20)
         Job.objects.create(
             user=make_user("a"), title="Job A", status=Job.Status.NOT_STARTED,
-            agreed_price=500, start_date=today + timezone.timedelta(days=2),
+            agreed_price=500, start_date=near, duration_days=2,
         )
         Job.objects.create(
             user=make_user("b"), title="Job B", status=Job.Status.NOT_STARTED,
-            agreed_price=500, start_date=today + timezone.timedelta(days=20),
-            duration_days=5,
+            agreed_price=500, start_date=far, duration_days=2,
         )
-        self.assertEqual(
-            Job.next_available_date(), today + timezone.timedelta(days=25)
-        )
+        dates = Job.booked_dates()
+        # the near job's 2 days, and the far job's 2 days
+        self.assertEqual(len(dates), 4)
+        # a day in the gap between them is free
+        gap_day = today + timezone.timedelta(days=10)
+        self.assertNotIn(gap_day, dates)
 
-    def test_requested_or_awaiting_deposit_jobs_do_not_count(self):
+    def test_requested_or_awaiting_deposit_jobs_do_not_block(self):
         """Nothing's actually confirmed yet - no price/date agreed, or the
         booking fee isn't even paid - so it shouldn't block the calendar."""
         Job.objects.create(
@@ -993,9 +981,9 @@ class NextAvailableDateTests(TestCase):
             status=Job.Status.AWAITING_DEPOSIT, agreed_price=500,
             start_date=timezone.localdate() + timezone.timedelta(days=1),
         )
-        self.assertIsNone(Job.next_available_date())
+        self.assertEqual(Job.booked_dates(), set())
 
-    def test_completed_and_cancelled_jobs_do_not_count(self):
+    def test_completed_and_cancelled_jobs_do_not_block(self):
         Job.objects.create(
             user=make_user("a"), title="Done", status=Job.Status.COMPLETE,
             agreed_price=500, start_date=timezone.localdate() - timezone.timedelta(days=30),
@@ -1004,19 +992,25 @@ class NextAvailableDateTests(TestCase):
             user=make_user("b"), title="Cancelled", status=Job.Status.CANCELLED,
             agreed_price=500, start_date=timezone.localdate() + timezone.timedelta(days=5),
         )
-        self.assertIsNone(Job.next_available_date())
+        self.assertEqual(Job.booked_dates(), set())
 
-    def test_an_overrunning_underway_job_is_at_least_tomorrow(self):
-        """The naive start+duration estimate has already passed but the
-        job is still marked underway - so it can't be "available now"."""
-        start = timezone.localdate() - timezone.timedelta(days=10)
+    def test_a_job_starting_in_the_past_only_blocks_from_today_onward(self):
+        start = timezone.localdate() - timezone.timedelta(days=2)
         Job.objects.create(
-            user=make_user(), title="Running long", status=Job.Status.UNDERWAY,
+            user=make_user(), title="Underway", status=Job.Status.UNDERWAY,
+            agreed_price=500, start_date=start, duration_days=5,
+        )
+        dates = Job.booked_dates()
+        self.assertNotIn(start, dates)  # in the past
+        self.assertIn(timezone.localdate(), dates)
+
+    def test_a_job_beyond_the_horizon_is_excluded(self):
+        start = timezone.localdate() + timezone.timedelta(days=200)
+        Job.objects.create(
+            user=make_user(), title="Far future", status=Job.Status.NOT_STARTED,
             agreed_price=500, start_date=start, duration_days=3,
         )
-        self.assertEqual(
-            Job.next_available_date(), timezone.localdate() + timezone.timedelta(days=1)
-        )
+        self.assertEqual(Job.booked_dates(within_days=180), set())
 
 
 class InvoiceTests(TestCase):

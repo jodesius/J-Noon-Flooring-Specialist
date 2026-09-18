@@ -39,10 +39,11 @@ def validate_profile_image(image):
         )
 
 
-class SixToTwelvePasswordValidator:
+class SixToEighteenPasswordValidator:
     """Password policy for this project:
 
-    * between 6 and 12 characters long
+    * between 6 and 18 characters long - 18 so a browser-generated
+      password (Chrome's own suggestion is ~15 characters) fits
     * at least one number
     * at least one special (non alphanumeric) character
     """
@@ -50,10 +51,10 @@ class SixToTwelvePasswordValidator:
     def validate(self, password, user=None):
         errors = []
 
-        if not 6 <= len(password) <= 12:
+        if not 6 <= len(password) <= 18:
             errors.append(
                 ValidationError(
-                    "This password must be between 6 and 12 characters long.",
+                    "This password must be between 6 and 18 characters long.",
                     code="password_length",
                 )
             )
@@ -77,6 +78,6 @@ class SixToTwelvePasswordValidator:
 
     def get_help_text(self):
         return (
-            "Your password must be 6 to 12 characters long and include at "
+            "Your password must be 6 to 18 characters long and include at "
             "least one number and one special character."
         )

@@ -316,9 +316,9 @@ Dependencies are pinned in `requirements.txt`.
   from a non-staff user 404s):
   - *Booking requested* → a form to set the **agreed price** (with the old
     quote figure right there to judge against), **start date**, **how many
-    days it'll take** (defaults to 3 - feeds the availability line above),
-    work summary and contact details, then **"Accept & confirm booking"**
-    (→ *Awaiting booking fee*), or decline.
+    days it'll take** (defaults to 3 - feeds the Contact page's
+    availability calendar), work summary and contact details, then
+    **"Accept & confirm booking"** (→ *Awaiting booking fee*), or decline.
   - *Awaiting booking fee* → **"Confirm £N received"** (pick the method),
     where **N is 20% of the agreed price**, logs the deposit `Payment`,
     which moves the job to **Booked – not started**.
@@ -505,21 +505,25 @@ one consistent story regardless of how the money moved.
 - **`SiteContact`** — a single admin-editable record (photo, personal
   intro, phone, email, enquiry recipient, coverage radius, service-area
   town list, response-time line, social links). The page reads it, so
-  the business can change any of it without a code change. **Availability**
-  — an "Available now" / "Next available: N Month Year" line on both the
-  Contact page and Book a job — is computed automatically
-  (`Job.next_available_date()`), not set by hand: it's the day after the
-  latest currently-booked job (booked-not-started or underway) is
-  expected to finish, worked out from that job's `start_date` +
-  `duration_days` (a new field on `Job`, defaulting to 3 - bumped up per
-  job for anything bigger when Joseph confirms the booking). Nothing
-  booked at all → "Available now". An `underway` job whose naive
-  estimate has already elapsed still counts as at least "not before
-  tomorrow", rather than wrongly claiming to be free while actively
-  mid-job. The photo box uses
-  `aspect-ratio` (matching the source image's own proportions) rather than
-  a fixed `max-height`, so the crop stays identical at every screen width
-  instead of framing the photo differently at each breakpoint.
+  the business can change any of it without a code change. The photo box
+  uses `aspect-ratio` (matching the source image's own proportions)
+  rather than a fixed `max-height`, so the crop stays identical at every
+  screen width instead of framing the photo differently at each
+  breakpoint.
+- **Availability calendar** — a real visual month calendar on the Contact
+  page (sitting in the right column, under the map/logo card), replacing
+  an earlier single "Next available: N Month Year" line that the user
+  found misleading in practice: a job booked two weeks out made the
+  *entire* two weeks in between look unavailable too, when most of it
+  was actually free. `Job.booked_dates()` (`bookings/models.py`) returns
+  the individual calendar days blocked by a currently-booked job
+  (booked-not-started or underway), each blocking `start_date` through
+  `start_date + duration_days - 1` — so a gap between two booked jobs
+  correctly shows as free. The view sends the next 180 days of booked
+  dates down as JSON; `contact/static/contact/js/availability_calendar.js`
+  renders a plain month grid client-side (today outlined, booked days
+  shaded, a Prev/Next pair to browse ahead — no page reload, no
+  external calendar library) — purely informational, not a date picker.
 - **Coverage map** — Leaflet, centred on Chelmsford town centre with a
   shaded circle at the coverage radius and a marker. Leaflet loads from
   cdnjs; tiles come from **Geoapify** (free tier, commercial use allowed —
@@ -778,8 +782,10 @@ lock those fixes in.
   1. not too similar to the username or email;
   2. not a known common password;
   3. not entirely numeric;
-  4. **project policy** (`accounts.validators.SixToTwelvePasswordValidator`):
-     6–12 characters, at least one number, at least one special character.
+  4. **project policy** (`accounts.validators.SixToEighteenPasswordValidator`):
+     6–18 characters (18 so a browser-generated password fits — Chrome's own
+     suggestion is ~15 characters), at least one number, at least one
+     special character.
 - The same policy is enforced on registration, on password change, and on
   password reset.
 
@@ -1429,7 +1435,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **273**, across `core`,
+tests where they add lasting value (currently **276**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

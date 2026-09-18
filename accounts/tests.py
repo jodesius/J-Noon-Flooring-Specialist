@@ -242,3 +242,40 @@ class ProfileVerifyButtonTests(TestCase):
         resp = self.client.get(reverse("accounts:profile"))
         self.assertContains(resp, "Verified")
         self.assertNotContains(resp, "Verify now")
+
+
+class PasswordLengthTests(TestCase):
+    """6 to 18 characters - bumped up from 12 so a browser-generated
+    password (Chrome's own suggestion is ~15 characters) actually fits,
+    at the user's request."""
+
+    def _register(self, password):
+        return self.client.post(reverse("accounts:register"), valid_registration(
+            password=password, password_confirm=password,
+        ))
+
+    def test_five_characters_is_rejected(self):
+        resp = self._register("ab1!c")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "between 6 and 18 characters")
+        self.assertFalse(User.objects.filter(username="newuser").exists())
+
+    def test_six_characters_is_accepted(self):
+        resp = self._register("ab1!cd")
+        self.assertRedirects(resp, reverse("core:home"))
+        self.assertTrue(User.objects.filter(username="newuser").exists())
+
+    def test_eighteen_characters_is_accepted(self):
+        password = "Ax1!" + "b" * 14  # exactly 18, built rather than hand-counted
+        self.assertEqual(len(password), 18)
+        resp = self._register(password)
+        self.assertRedirects(resp, reverse("core:home"))
+        self.assertTrue(User.objects.filter(username="newuser").exists())
+
+    def test_nineteen_characters_is_rejected(self):
+        password = "Ax1!" + "b" * 15  # exactly 19
+        self.assertEqual(len(password), 19)
+        resp = self._register(password)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "between 6 and 18 characters")
+        self.assertFalse(User.objects.filter(username="newuser").exists())
