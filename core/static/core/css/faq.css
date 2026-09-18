@@ -1,23 +1,38 @@
 /* ============================================================
-   FAQ page - a jump-nav, then per-category accordions.
-   Shares the "document" feel of legal.css but with expandable items.
+   FAQ page - oak-brown ground, white card, matches Bookings/Contact.
+   A jump-nav, then per-category accordions inside the card.
    ============================================================ */
 
-.faq-page {
+.page-faq { background-color: #6b4423; }  /* oak brown - same as Bookings */
+
+.faq-hero {
     max-width: 760px;
+    margin: 2.5rem auto 1.5rem;
+    padding: 0 1.25rem;
+    text-align: center;
+}
+
+.faq-hero h1 {
+    color: #fff;
+    margin: 0 0 0.5rem;
+}
+
+.faq-hero__intro {
+    color: #f0e4d6;
     margin: 0 auto;
-    padding: 2rem 1.25rem 4rem;
+    max-width: 58ch;
     line-height: 1.6;
 }
 
-.faq-page h1 {
-    color: var(--wood-header);
-    margin-bottom: 0.25rem;
-}
-
-.faq-page__intro {
-    color: #2b2b2b;
-    margin-bottom: 1.5rem;
+.faq-card {
+    max-width: 760px;
+    margin: 0 auto 2.5rem;
+    padding: 1.6rem 1.5rem 1.8rem;
+    line-height: 1.6;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
 }
 
 .faq-jump {
@@ -98,8 +113,9 @@
 .faq-item__answer p:last-child { margin-bottom: 0; }
 
 .faq-page__footer {
-    margin-top: 2.5rem;
-    color: #6b6b6b;
+    text-align: center;
+    margin: 0 0 3rem;
+    color: #f0e4d6;
 }
 
-.faq-page__footer a { color: var(--wood-header); }
+.faq-page__footer a { color: #fff; font-weight: 600; }

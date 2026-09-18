@@ -11,14 +11,16 @@
 {% endblock %}
 
 {% block content %}
-<article class="faq-page">
+<section class="faq-hero">
     <h1>Frequently Asked Questions</h1>
-    <p class="faq-page__intro">
+    <p class="faq-hero__intro">
         Everything from how booking and refunds work on this site, to a plain-English
         guide to flooring materials and the terms you'll hear along the way. Click a
         question to open it.
     </p>
+</section>
 
+<article class="faq-card">
     {% if groups %}
         <nav class="faq-jump" aria-label="Jump to a section">
             {% for group in groups %}
@@ -40,12 +42,12 @@
     {% else %}
         <p>Nothing here yet - check back soon.</p>
     {% endif %}
-
-    <p class="faq-page__footer">
-        Can't find what you're after?
-        <a href="{% url 'contact:index' %}">Get in touch</a> and I'll help directly.
-    </p>
 </article>
+
+<p class="faq-page__footer">
+    Can't find what you're after?
+    <a href="{% url 'contact:index' %}">Get in touch</a> and I'll help directly.
+</p>
 
 <script type="application/ld+json">{{ faq_jsonld|safe }}</script>
 {% endblock %}
