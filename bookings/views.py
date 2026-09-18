@@ -385,6 +385,14 @@ def _handle_job_action(request, job):
         if form.is_valid():
             payment = form.save(commit=False)
             payment.job = job
+            if payment.kind == Payment.Kind.REFUND:
+                # Real money (anything but Credit) settles an existing debt
+                # instead of issuing fresh credit - decided from the debt as
+                # it stands right now, before this payment lands.
+                payment.settles_debt = (
+                    payment.method != Payment.Method.CREDIT
+                    and bool(job.owed_to_customer)
+                )
             payment.save()
             job.refresh_from_db()
             if payment.kind == Payment.Kind.REFUND:
@@ -395,15 +403,26 @@ def _handle_job_action(request, job):
                 invoice.snapshot_from_job()
                 invoice.save()
                 invoice.ensure_default_line_item()
-                if job.owed_to_customer:
-                    balance_note = f"we now owe them £{job.owed_to_customer:.2f}"
+                if payment.settles_debt:
+                    if job.owed_to_customer:
+                        balance_note = f"we still owe them £{job.owed_to_customer:.2f}"
+                    else:
+                        balance_note = "we owe them nothing now"
+                    messages.success(
+                        request,
+                        f"£{payment.amount:.2f} paid to the customer, recorded "
+                        f"({invoice.number}) - {balance_note}.",
+                    )
                 else:
-                    balance_note = f"outstanding balance is now £{job.balance_due:.2f}"
-                messages.success(
-                    request,
-                    f"£{payment.amount:.2f} refund recorded ({invoice.number}) - "
-                    f"{balance_note}.",
-                )
+                    if job.owed_to_customer:
+                        balance_note = f"we now owe them £{job.owed_to_customer:.2f}"
+                    else:
+                        balance_note = f"outstanding balance is now £{job.balance_due:.2f}"
+                    messages.success(
+                        request,
+                        f"£{payment.amount:.2f} refund recorded ({invoice.number}) - "
+                        f"{balance_note}.",
+                    )
             else:
                 # Same paper trail a card payment gets automatically - cash
                 # (or cheque/other) logged by hand shouldn't be any different.

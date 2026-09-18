@@ -160,16 +160,17 @@ class JobPhotoInline(admin.TabularInline):
 class PaymentInline(admin.TabularInline):
     model = Payment
     extra = 0
-    fields = ("amount", "kind", "method", "received_on", "reference", "note")
+    fields = ("amount", "kind", "method", "settles_debt", "received_on",
+              "reference", "note")
 
 
 class InvoiceInline(admin.TabularInline):
     model = Invoice
     extra = 0
     fields = ("number", "kind", "issued_on", "agreed_total", "total_paid",
-              "total_refunded", "balance_display")
+              "total_refunded", "total_refund_settled", "balance_display")
     readonly_fields = ("number", "agreed_total", "total_paid", "total_refunded",
-                       "balance_display")
+                       "total_refund_settled", "balance_display")
 
     @admin.display(description="balance")
     def balance_display(self, obj):
@@ -198,7 +199,7 @@ class JobAdmin(admin.ModelAdmin):
         "reference", "slug", "user", "quote_request", "customer_note",
         "created_at", "updated_at", "confirmed_at",
         "booking_fee_display", "total_paid_display", "total_refunded_display",
-        "balance_display",
+        "total_refund_settled_display", "balance_display",
     )
     fieldsets = (
         ("Customer", {"fields": ("user", "contact_name", "contact_phone",
@@ -207,7 +208,7 @@ class JobAdmin(admin.ModelAdmin):
         ("Agreed terms", {
             "fields": ("agreed_price", "start_date", "booking_fee_display",
                        "total_paid_display", "total_refunded_display",
-                       "balance_display"),
+                       "total_refund_settled_display", "balance_display"),
         }),
         ("Status", {"fields": ("status", "staff_notes", "reference",
                                "created_at", "confirmed_at", "updated_at")}),
@@ -235,6 +236,10 @@ class JobAdmin(admin.ModelAdmin):
     @admin.display(description="refunded")
     def total_refunded_display(self, obj):
         return f"£{obj.total_refunded:.2f}"
+
+    @admin.display(description="paid back to customer")
+    def total_refund_settled_display(self, obj):
+        return f"£{obj.total_refund_settled:.2f}"
 
     @admin.action(description="Confirm booking (needs price + start date)")
     def confirm_booking(self, request, queryset):
@@ -304,17 +309,20 @@ class InvoiceLineItemInline(admin.TabularInline):
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
     list_display = ("number", "job", "kind", "issued_on", "agreed_total",
-                    "total_paid", "total_refunded", "balance_display")
+                    "total_paid", "total_refunded", "total_refund_settled",
+                    "balance_display")
     list_filter = ("kind", "issued_on")
     search_fields = ("number", "job__reference", "job__title")
     ordering = ("-created_at",)
     inlines = (InvoiceLineItemInline,)
     readonly_fields = ("number", "job", "kind", "agreed_total", "total_paid",
-                       "total_refunded", "payments_snapshot", "created_at")
+                       "total_refunded", "total_refund_settled",
+                       "payments_snapshot", "created_at")
     fieldsets = (
         (None, {"fields": ("number", "job", "kind", "issued_on")}),
         ("Itemise the work in the lines below. The subtotal follows their sum.",
-         {"fields": ("agreed_total", "total_paid", "total_refunded", "notes")}),
+         {"fields": ("agreed_total", "total_paid", "total_refunded",
+                     "total_refund_settled", "notes")}),
         ("Frozen at issue", {"fields": ("payments_snapshot", "created_at"),
                              "classes": ("collapse",)}),
     )

@@ -377,6 +377,22 @@ one consistent story regardless of how the money moved.
   there's a paper trail on both sides without an extra manual step; the
   PDF itself reads "We owe you £X" too when the balance goes negative,
   instead of the old (and wrong, in that case) "Paid in full."
+- **A refund's method decides whether it's a paper credit or real money
+  paid out.** Pick **Credit** and it behaves exactly like the store-credit
+  model above — a book entry only. Pick anything else (Cash, Cheque,
+  Bank transfer, Other) while we currently owe the customer money, and
+  it's treated as **settling that debt** instead of issuing fresh credit:
+  it's capped at what's actually owed (can't settle more in one go than
+  we owe, no override), can be partial (paying £20 off a £50 debt leaves
+  £30 still owed), and shows as a **"+ £X paid to you"** line on the
+  invoice rather than a deduction — `Job.total_refund_settled` tracks it
+  separately from `total_refunded` (the credit itself), and it's what
+  brings the balance back towards zero. With nothing currently owed, any
+  method behaves exactly like a Credit refund. "Card (online)" and "Bank
+  transfer" are hidden from the Record a payment method dropdown outside
+  of a refund (Stripe handles real card payments; bank transfers aren't
+  used for incoming payments any more) — a small script toggles them
+  in/out as the payment **kind** changes, no page reload needed.
 - **Invoices** — `reportlab` generates a PDF for a **booking-fee receipt**
   or a **final invoice**, issued from the manage panel or an admin action.
   The letterhead carries the **company logo** (fetched once from Cloudinary,
@@ -400,9 +416,11 @@ one consistent story regardless of how the money moved.
   `JobPhoto` (Cloudinary-backed, file removed
   from storage on delete), `JobMessage` (the chat thread), `Payment`
   (amount — always positive, a `MinValueValidator` backstops it — kind,
-  including `refund`, method, date), `RefundRequest` (job, requester,
+  including `refund`, method (including `credit`), `settles_debt` bool,
+  date), `RefundRequest` (job, requester,
   reason, status requested/resolved), `Invoice`
-  (auto number `INV-####`, kind, snapshotted totals + payment ledger) with
+  (auto number `INV-####`, kind, snapshotted totals incl.
+  `total_refund_settled` + payment ledger) with
   `InvoiceLineItem` children (description, amount — their sum keeps the
   invoice's `agreed_total` in step). `QuoteRequest` gained a `reference`
   (`JQ####`, assigned on save; a data migration backfilled existing rows).
@@ -1316,7 +1334,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **228**, across `core`,
+tests where they add lasting value (currently **236**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

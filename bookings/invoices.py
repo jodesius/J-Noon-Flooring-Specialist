@@ -188,7 +188,8 @@ def render_invoice_pdf(invoice):
     subtotal = sum((li.amount for li in line_items), Decimal("0.00"))
     total_paid = invoice.total_paid or Decimal("0.00")
     total_refunded = invoice.total_refunded or Decimal("0.00")
-    balance = subtotal - total_paid - total_refunded
+    total_refund_settled = invoice.total_refund_settled or Decimal("0.00")
+    balance = subtotal - total_paid - total_refunded + total_refund_settled
 
     rows = [[Paragraph("<b>Description</b>", cell), Paragraph("<b>Amount</b>", cell_r)]]
     for li in line_items:
@@ -201,18 +202,24 @@ def render_invoice_pdf(invoice):
 
     # A refund comes off the balance the same way a payment does (it's
     # treated like store credit, not money that's still owed back), so
-    # every row here is a deduction from the subtotal.
+    # every row here is a deduction from the subtotal - except a refund
+    # that settled an existing debt, which is money actually paid back to
+    # the customer, so it's an addition instead.
     for pay in invoice.payments_snapshot:
         amount = Decimal(str(pay.get("amount", "0")))
         is_refund = pay.get("kind") == "refund"
-        verb = "issued" if is_refund else "received"
+        settles_debt = pay.get("settles_debt", False)
+        if settles_debt:
+            verb, sign = "paid to you", "+ "
+        else:
+            verb, sign = ("issued" if is_refund else "received"), "- "
         desc = "%s %s %s" % (pay.get("label", "Payment"), verb,
                              _fmt_date(pay.get("date")))
         method = pay.get("method")
         if method:
             desc += " (%s)" % method
         rows.append([Paragraph(desc, cell),
-                     Paragraph("- " + _money(amount), cell_r)])
+                     Paragraph(sign + _money(amount), cell_r)])
 
     if balance < 0:
         # A refund exceeding what's been paid (e.g. accidental damage costing

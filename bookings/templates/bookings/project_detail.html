@@ -103,6 +103,9 @@
                     {% if job.total_refunded %}
                         <tr><th>Refunded</th><td>&minus;&pound;{{ job.total_refunded|floatformat:2 }}</td></tr>
                     {% endif %}
+                    {% if job.total_refund_settled %}
+                        <tr><th>Paid back to you</th><td>+&pound;{{ job.total_refund_settled|floatformat:2 }}</td></tr>
+                    {% endif %}
                     {% if job.owed_to_customer %}
                         <tr class="job-money__due">
                             <th>We owe you</th>
@@ -294,29 +297,34 @@
 
 {% block extra_js %}
     <script>
-        // "Bank transfer" as a payment method only makes sense for a
-        // refund (money going back out) - card payments are automatic
-        // via Stripe, so it's hidden for every other kind to stop it
-        // being picked by mistake for an incoming payment. No-ops
-        // entirely if the staff panel (and its form) isn't on the page.
+        // "Bank transfer" and "Credit" as payment methods only make sense
+        // for a refund (money going back out, or a paper credit note) -
+        // card payments are automatic via Stripe and every other kind is
+        // an incoming payment, so both are hidden otherwise to stop them
+        // being picked by mistake. No-ops entirely if the staff panel
+        // (and its form) isn't on the page.
         (function () {
             var kindField = document.getElementById("id_kind");
             var methodField = document.getElementById("id_method");
             if (!kindField || !methodField) return;
-            var bankOption = methodField.querySelector('option[value="bank"]');
-            if (!bankOption) return;
+            var refundOnlyOptions = ["bank", "credit"].map(function (value) {
+                return methodField.querySelector('option[value="' + value + '"]');
+            }).filter(Boolean);
+            if (!refundOnlyOptions.length) return;
 
-            function syncBankOption() {
+            function syncRefundOnlyOptions() {
                 var isRefund = kindField.value === "refund";
-                bankOption.hidden = !isRefund;
-                bankOption.disabled = !isRefund;
-                if (!isRefund && methodField.value === "bank") {
+                refundOnlyOptions.forEach(function (option) {
+                    option.hidden = !isRefund;
+                    option.disabled = !isRefund;
+                });
+                if (!isRefund && refundOnlyOptions.some(function (o) { return o.value === methodField.value; })) {
                     methodField.value = "cash";
                 }
             }
 
-            kindField.addEventListener("change", syncBankOption);
-            syncBankOption();
+            kindField.addEventListener("change", syncRefundOnlyOptions);
+            syncRefundOnlyOptions();
         })();
     </script>
 {% endblock %}

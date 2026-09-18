@@ -858,11 +858,43 @@ class InvoiceTests(TestCase):
         self.assertEqual(len(refund_rows), 1)
         self.assertEqual(refund_rows[0]["amount"], "30.00")
 
+    def test_snapshot_splits_a_settled_refund_from_a_credit_refund(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND,
+            method=Payment.Method.CREDIT,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND,
+            method=Payment.Method.CASH, settles_debt=True,
+        )
+        inv = self._issue()
+        self.assertEqual(inv.total_refunded, Decimal("30.00"))  # only the credit note
+        self.assertEqual(inv.total_refund_settled, Decimal("30.00"))
+        self.assertEqual(inv.balance, inv.agreed_total - Decimal("100.00"))
+        settlement_rows = [p for p in inv.payments_snapshot if p.get("settles_debt")]
+        self.assertEqual(len(settlement_rows), 1)
+        self.assertEqual(settlement_rows[0]["amount"], "30.00")
+
     def test_pdf_renders_with_a_refund_row(self):
         Payment.objects.create(
             job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND
         )
         inv = self._issue()
+        from bookings.invoices import render_invoice_pdf
+
+        pdf = render_invoice_pdf(inv)
+        self.assertTrue(pdf.startswith(b"%PDF"))
+
+    def test_pdf_renders_a_settled_refund_row(self):
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND,
+            method=Payment.Method.CREDIT,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("30.00"), kind=Payment.Kind.REFUND,
+            method=Payment.Method.CASH, settles_debt=True,
+        )
+        inv = self._issue(kind=Invoice.Kind.REFUND)
         from bookings.invoices import render_invoice_pdf
 
         pdf = render_invoice_pdf(inv)
@@ -1832,6 +1864,129 @@ class StaffManageTests(TestCase):
 
         resp = self.client.get(self._detail())
         self.assertContains(resp, "We owe you")
+
+    def test_card_is_not_offered_as_a_manual_payment_method(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        resp = self.client.get(self._detail())
+        self.assertNotContains(resp, 'value="card"')
+        self.assertContains(resp, 'value="credit"')
+
+    # -- refund method: Credit (paper) vs real money settling a debt --
+
+    def test_cash_refund_settles_an_existing_debt_fully(self):
+        """Real money (cash/bank/cheque/other) pays down what we already
+        owe, rather than stacking a fresh refund on top of it."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("1500"),
+            kind=Payment.Kind.BALANCE, method=Payment.Method.BANK,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("50"),
+            kind=Payment.Kind.REFUND, method=Payment.Method.CREDIT,
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.owed_to_customer, Decimal("50"))
+
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "50", "kind": "refund",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertIsNone(self.job.owed_to_customer)
+        self.assertEqual(self.job.balance_due, Decimal("0"))
+        self.assertEqual(self.job.total_refunded, Decimal("50"))  # the credit note itself, unchanged
+        self.assertEqual(self.job.total_refund_settled, Decimal("50"))
+
+    def test_cash_refund_partially_settles_a_debt(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("1500"),
+            kind=Payment.Kind.BALANCE, method=Payment.Method.BANK,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("50"),
+            kind=Payment.Kind.REFUND, method=Payment.Method.CREDIT,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "20", "kind": "refund",
+            "method": "bank", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.owed_to_customer, Decimal("30"))
+        self.assertEqual(self.job.total_refund_settled, Decimal("20"))
+
+    def test_cash_refund_cannot_exceed_what_is_owed(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("1500"),
+            kind=Payment.Kind.BALANCE, method=Payment.Method.BANK,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("50"),
+            kind=Payment.Kind.REFUND, method=Payment.Method.CREDIT,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "70", "kind": "refund",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.owed_to_customer, Decimal("50"))  # rejected, unchanged
+        self.assertEqual(self.job.total_refund_settled, Decimal("0"))
+
+    def test_cash_refund_with_no_debt_behaves_like_a_normal_refund(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("700"),
+            kind=Payment.Kind.PART, method=Payment.Method.BANK,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "50", "kind": "refund",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertIsNone(self.job.owed_to_customer)
+        self.assertEqual(self.job.total_refunded, Decimal("50"))
+        self.assertEqual(self.job.total_refund_settled, Decimal("0"))
+        self.assertEqual(self.job.balance_due, Decimal("750"))  # 1500-700-50
+
+    def test_credit_refund_deepens_debt_instead_of_settling_it(self):
+        """Credit never settles - it's a paper entry, so more of it just
+        deepens what's owed, same as before this feature existed."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("1500"),
+            kind=Payment.Kind.BALANCE, method=Payment.Method.BANK,
+        )
+        Payment.objects.create(
+            job=self.job, amount=Decimal("50"),
+            kind=Payment.Kind.REFUND, method=Payment.Method.CREDIT,
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "30", "kind": "refund",
+            "method": "credit", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.total_refunded, Decimal("80"))
+        self.assertEqual(self.job.owed_to_customer, Decimal("80"))
+        self.assertEqual(self.job.total_refund_settled, Decimal("0"))
 
     def test_staff_can_resolve_a_refund_request(self):
         rr = RefundRequest.objects.create(

@@ -414,9 +414,21 @@ class Job(models.Model):
     def total_refunded(self):
         """Treated like store credit: it comes straight off what's still
         owed, without touching the agreed price or the paid-so-far figure -
-        so a refund always makes the balance drop, full stop."""
+        so a refund always makes the balance drop, full stop. Excludes any
+        refund that settled an existing debt (see total_refund_settled) -
+        those pay a debt down rather than issuing fresh credit."""
         total = self.payments.filter(
-            kind=Payment.Kind.REFUND
+            kind=Payment.Kind.REFUND, settles_debt=False,
+        ).aggregate(t=Sum("amount"))["t"]
+        return total or Decimal("0.00")
+
+    @property
+    def total_refund_settled(self):
+        """How much of the credit above has actually been paid out (cash,
+        bank transfer, etc, chosen while we owed the customer money) -
+        brings the balance back up towards zero as it's settled."""
+        total = self.payments.filter(
+            kind=Payment.Kind.REFUND, settles_debt=True,
         ).aggregate(t=Sum("amount"))["t"]
         return total or Decimal("0.00")
 
@@ -424,7 +436,10 @@ class Job(models.Model):
     def balance_due(self):
         if self.agreed_price is None:
             return None
-        return self.agreed_price - self.total_paid - self.total_refunded
+        return (
+            self.agreed_price - self.total_paid
+            - self.total_refunded + self.total_refund_settled
+        )
 
     @property
     def owed_to_customer(self):
@@ -574,6 +589,7 @@ class Payment(models.Model):
         BANK = "bank", "Bank transfer"
         CHEQUE = "cheque", "Cheque"
         OTHER = "other", "Other"
+        CREDIT = "credit", "Credit (no money sent)"
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="payments")
     # Always a plain positive amount, even for a refund - Job.total_paid is
@@ -584,6 +600,11 @@ class Payment(models.Model):
     )
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.BALANCE)
     method = models.CharField(max_length=10, choices=Method.choices, default=Method.BANK)
+    # A refund with a real-money method (everything except Credit) that pays
+    # down an existing "we owe them" debt rather than issuing fresh credit -
+    # set once, at creation, from Job.owed_to_customer at that moment. See
+    # Job.total_refunded / total_refund_settled for what this changes.
+    settles_debt = models.BooleanField(default=False)
     reference = models.CharField(
         max_length=120, blank=True,
         help_text="Card receipt id, bank reference, etc.",
@@ -655,6 +676,7 @@ class Invoice(models.Model):
     agreed_total = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     total_paid = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     total_refunded = models.DecimalField(max_digits=9, decimal_places=2, default=0)
+    total_refund_settled = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     # Frozen list of the payments this invoice accounts for, captured at issue
     # so a re-download always shows the same ledger. Each entry:
     # {"label": str, "method": str, "date": "YYYY-MM-DD", "amount": "123.45"}
@@ -677,7 +699,10 @@ class Invoice(models.Model):
 
     @property
     def balance(self):
-        return self.agreed_total - self.total_paid - self.total_refunded
+        return (
+            self.agreed_total - self.total_paid
+            - self.total_refunded + self.total_refund_settled
+        )
 
     def _relevant_payments(self):
         qs = self.job.payments.all()
@@ -695,7 +720,13 @@ class Invoice(models.Model):
             Decimal("0.00"),
         )
         self.total_refunded = sum(
-            (p.amount for p in payments if p.kind == Payment.Kind.REFUND),
+            (p.amount for p in payments
+             if p.kind == Payment.Kind.REFUND and not p.settles_debt),
+            Decimal("0.00"),
+        )
+        self.total_refund_settled = sum(
+            (p.amount for p in payments
+             if p.kind == Payment.Kind.REFUND and p.settles_debt),
             Decimal("0.00"),
         )
         self.agreed_total = self.job.agreed_price or Decimal("0.00")
@@ -706,6 +737,7 @@ class Invoice(models.Model):
                 "date": p.received_on.isoformat(),
                 "amount": str(p.amount),
                 "kind": p.kind,
+                "settles_debt": p.settles_debt,
             }
             for p in payments
         ]

@@ -25,6 +25,9 @@
                 {% if job.total_refunded %}
                     <tr><th>Refunded</th><td>&minus;&pound;{{ job.total_refunded|floatformat:2 }}</td></tr>
                 {% endif %}
+                {% if job.total_refund_settled %}
+                    <tr><th>Paid back to you</th><td>+&pound;{{ job.total_refund_settled|floatformat:2 }}</td></tr>
+                {% endif %}
                 <tr class="job-money__due">
                     <th>Outstanding</th><td>&pound;{{ balance|floatformat:2 }}</td>
                 </tr>

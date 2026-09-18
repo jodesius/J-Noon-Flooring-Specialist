@@ -315,19 +315,27 @@ class ConfirmBookingForm(forms.ModelForm):
 
 
 class RecordPaymentForm(forms.ModelForm):
-    """Staff-only: log a payment the customer has made (cash / bank / card),
-    or a refund (kind=refund - typed as a normal positive amount, e.g. 50
-    for £50 back). A refund is treated like store credit: it comes straight
-    off the outstanding balance without touching the agreed price or the
-    paid-so-far figure (Job.total_refunded is what subtracts it).
+    """Staff-only: log a payment the customer has made (cash / cheque /
+    etc), or a refund (kind=refund - typed as a normal positive amount, e.g.
+    50 for £50 back).
 
-    A refund can exceed what's actually been paid (e.g. accidental damage
-    costing more than the job itself, per the Terms & Conditions) - that's
-    a real, legitimate scenario, not something to block outright. It just
-    needs a deliberate second confirmation rather than being one careless
-    typo away, since it means the balance goes negative - we now owe THEM.
-    This form only ever records that on the ledger; the actual money still
-    goes out manually (bank transfer / cash), same as any other refund.
+    A refund's *method* decides what it means:
+    - Credit: a paper entry only, no money has moved yet - store credit,
+      exactly like every refund used to work. Comes straight off the
+      balance without touching the agreed price or paid-so-far figure.
+    - Anything else (cash, bank transfer, cheque, other): real money has
+      actually been handed over. If we currently owe the customer money
+      (Job.owed_to_customer), this *settles* that debt instead of issuing
+      fresh credit - it's capped at what's owed (can't settle more than
+      that in one go) and brings the balance back up towards zero. With
+      nothing currently owed, it behaves exactly like a Credit refund.
+
+    A Credit refund (or a real-money one with nothing currently owed) can
+    still exceed what's actually been paid (e.g. accidental damage costing
+    more than the job itself, per the Terms & Conditions) - that's a real,
+    legitimate scenario, not something to block outright. It just needs a
+    deliberate second confirmation rather than being one careless typo
+    away, since it means the balance goes negative - we now owe THEM.
     """
 
     confirm_exceeds_paid = forms.BooleanField(
@@ -338,6 +346,12 @@ class RecordPaymentForm(forms.ModelForm):
     def __init__(self, *args, job=None, **kwargs):
         self.job = job
         super().__init__(*args, **kwargs)
+        # Staff never manually record a card payment here - Stripe handles
+        # those automatically.
+        self.fields["method"].choices = [
+            choice for choice in Payment.Method.choices
+            if choice[0] != Payment.Method.CARD
+        ]
 
     class Meta:
         model = Payment
@@ -353,19 +367,30 @@ class RecordPaymentForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         amount = cleaned.get("amount")
+        method = cleaned.get("method")
         if (
             cleaned.get("kind") == Payment.Kind.REFUND
             and amount is not None and self.job is not None
         ):
-            refundable = self.job.total_paid - self.job.total_refunded
-            if amount > refundable and not cleaned.get("confirm_exceeds_paid"):
-                self.add_error(
-                    "amount",
-                    f"This is £{amount - refundable:.2f} more than the "
-                    f"£{refundable:.2f} they've paid so far. If that's "
-                    "right (e.g. damage cost more than the job), tick the "
-                    "confirmation box below and record it again.",
-                )
+            owed = self.job.owed_to_customer
+            if method != Payment.Method.CREDIT and owed:
+                if amount > owed:
+                    self.add_error(
+                        "amount",
+                        f"We only owe them £{owed:.2f} right now, so this "
+                        "can't settle more than that in one go. Record the "
+                        "rest separately once there's more owed.",
+                    )
+            else:
+                refundable = self.job.total_paid - self.job.total_refunded
+                if amount > refundable and not cleaned.get("confirm_exceeds_paid"):
+                    self.add_error(
+                        "amount",
+                        f"This is £{amount - refundable:.2f} more than the "
+                        f"£{refundable:.2f} they've paid so far. If that's "
+                        "right (e.g. damage cost more than the job), tick the "
+                        "confirmation box below and record it again.",
+                    )
         return cleaned
 
 
