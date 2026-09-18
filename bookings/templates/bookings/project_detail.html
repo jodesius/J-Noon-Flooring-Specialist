@@ -272,7 +272,8 @@
 
             {% if message_form %}
                 <form method="post" action="{% url 'bookings:post_job_message' slug=job.slug %}"
-                      class="bk-form job-chat__form" enctype="multipart/form-data">
+                      class="bk-form job-chat__form" enctype="multipart/form-data"
+                      id="job-chat-form">
                     {% csrf_token %}
                     {% include "bookings/_field.html" with field=message_form.body %}
                     {% include "bookings/_field.html" with field=message_form.photo %}
@@ -293,9 +294,14 @@
         <a href="{% url 'bookings:projects' %}">&larr; All projects</a>
     </p>
 </section>
+
+{% if message_form %}
+    {% include "bookings/_loading_overlay.html" with form_id="job-chat-form" loading_title="Sending your message" loading_note="This'll only take a moment." %}
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+    <script src="{% static 'bookings/js/form_loading.js' %}" defer></script>
     <script>
         // "Bank transfer" and "Credit" as payment methods only make sense
         // for a refund (money going back out, or a paper credit note) -

@@ -1,14 +1,19 @@
 {% comment %}
 Full-screen "please wait" overlay - the same one for any slow, one-shot
-action (AI quote, card payment). Shown by quote-loading.js / checkout.js
-once the customer submits; hidden until then.
+action (AI quote, card payment, call-back, chat message). Shown by
+quote-loading.js / checkout.js / form_loading.js once the customer
+submits; hidden until then.
 
-Optional context vars (both plain text, safe to leave as defaults):
+Optional context vars (all plain text/id, safe to leave as defaults):
   loading_title - headline, e.g. "Your estimate is being calculated"
   loading_note  - the line under it, e.g. what it's waiting on
+  form_id       - id of the specific form to lock (form_loading.js). Only
+                  needed on a page with more than one form - leave unset
+                  on a page with just the one and it locks that instead.
 {% endcomment %}
 <div class="bk-loading" id="bk-loading" role="alertdialog" aria-modal="true"
-     aria-labelledby="bk-loading-title" aria-describedby="bk-loading-note">
+     aria-labelledby="bk-loading-title" aria-describedby="bk-loading-note"
+     {% if form_id %}data-form-id="{{ form_id }}"{% endif %}>
     <div class="bk-loading__box">
         <div class="bk-loading__spinner" aria-hidden="true"></div>
         <p class="bk-loading__title" id="bk-loading-title">{{ loading_title|default:"Your estimate is being calculated" }}</p>

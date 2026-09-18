@@ -164,6 +164,15 @@ Dependencies are pinned in `requirements.txt`.
   `CALL_DAILY_LIMIT` per user per day.
 - Staff manage requests in the admin (`CallRequest`, read-only, editable
   status + notes, with a "on calendar?" flag).
+- **A "please wait" overlay locks the form on submit** (found missing
+  during real-user testing — impatient re-clicking could fire the same
+  request twice) — "Booking your request now", same overlay/spinner used
+  by the AI quote page. Same fix on the customer portal's chat "Send"
+  form ("Sending your message"), which needed a *targeted* version
+  (`bookings/static/bookings/js/form_loading.js`, keyed off the
+  overlay's own `data-form-id` rather than a page-wide `.bk-form`
+  selector) since that page can have more than one form on it at once
+  (chat + refund request).
 
 **Get a free quote — `/bookings/quote/`** (`@login_required`)
 
@@ -251,8 +260,10 @@ Dependencies are pinned in `requirements.txt`.
   when they book — not a secret (the UUID slug still guards the quote
   itself).
 - **Book a job — `/bookings/book/`** (`@login_required`) — the customer
-  gives their **name**, the **address of works**, and **what the job is**,
-  plus an optional note. If they had an online quote they can **paste its
+  gives their **name**, **phone number** (required — a real gap found in
+  testing: the form could be sent with no way to actually reach the
+  customer about the job), the **address of works**, and **what the job
+  is**, plus an optional note. If they had an online quote they can **paste its
   reference** (or arrive via the "Book this job" button, which passes
   `?quote=JQ0007`): the form then links that quote and **fills any field
   they left blank** from their quote answers — name, phone, postcode, a
@@ -1388,7 +1399,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **261**, across `core`,
+tests where they add lasting value (currently **262**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

@@ -548,6 +548,15 @@ class CallRequestTests(TestCase):
         resp = self.client.get(reverse("bookings:index"))
         self.assertContains(resp, reverse("bookings:call"))
 
+    def test_page_has_a_loading_overlay_locked_to_the_form(self):
+        """Added after real-user testing showed the form could be
+        double-submitted with no feedback while it waited."""
+        resp = self.client.get(reverse("bookings:call"))
+        self.assertContains(resp, 'id="call-request-form"')
+        self.assertContains(resp, 'data-form-id="call-request-form"')
+        self.assertContains(resp, "Booking your request now")
+        self.assertContains(resp, "form_loading.js")
+
 
 class CallWindowTests(TestCase):
     def test_window_is_a_slot_at_the_chosen_time(self):
@@ -638,6 +647,16 @@ class BookJobTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(Job.objects.count(), 0)
+
+    def test_phone_number_is_required(self):
+        """Without one, staff have no way to reach the customer about the
+        job - a real gap a customer hit in production testing."""
+        resp = self.client.post(
+            reverse("bookings:book"), self._payload(contact_phone="")
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Job.objects.count(), 0)
+        self.assertContains(resp, "I need a phone number")
 
     def test_honeypot_blocks(self):
         resp = self.client.post(
@@ -1264,6 +1283,17 @@ class JobChatTests(TestCase):
         resp = self.client.get(self._url())
         self.assertContains(resp, "Messages")
         self.assertContains(resp, self._post_url())
+
+    def test_chat_form_has_a_loading_overlay_locked_to_itself(self):
+        """Added after real-user testing showed it could be double-sent
+        with no feedback - and the page can have more than one form
+        (chat, refund request), so the overlay has to be targeted."""
+        self.client.force_login(self.customer)
+        resp = self.client.get(self._url())
+        self.assertContains(resp, 'id="job-chat-form"')
+        self.assertContains(resp, 'data-form-id="job-chat-form"')
+        self.assertContains(resp, "Sending your message")
+        self.assertContains(resp, "form_loading.js")
 
     @LOCMEM
     def test_customer_can_post_a_message_and_staff_is_emailed(self):

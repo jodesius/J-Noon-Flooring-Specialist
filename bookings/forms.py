@@ -289,6 +289,7 @@ class BookJobForm(forms.ModelForm):
         for name, message in (
             ("title", "Tell me what the job is, or paste a quote reference above."),
             ("contact_name", "I need a name for the booking."),
+            ("contact_phone", "I need a phone number in case I need to reach you about the job."),
             ("site_address", "I need the address where the work is."),
         ):
             if not (cleaned.get(name) or "").strip():
