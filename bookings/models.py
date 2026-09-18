@@ -358,6 +358,12 @@ class Job(models.Model):
     start_date = models.DateField(
         null=True, blank=True, help_text="Agreed start date."
     )
+    duration_days = models.PositiveSmallIntegerField(
+        default=3,
+        help_text="Roughly how many days this job will take - used to "
+        "work out when you're next available. Bump it up for a bigger "
+        "job than the 3-day default.",
+    )
 
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.REQUESTED
@@ -493,6 +499,30 @@ class Job(models.Model):
         if self.status == self.Status.AWAITING_DEPOSIT and self.deposit_paid:
             self.status = self.Status.NOT_STARTED
             self.save(update_fields=["status", "updated_at"])
+
+    @classmethod
+    def next_available_date(cls):
+        """None if free right now, else the day this business is next free
+        - the day after the latest currently-booked job (not started yet,
+        or underway) is expected to finish. Each job's finish is
+        start_date + duration_days (default 3, overridable per job for a
+        bigger one) - a rough automatic estimate, not a real calendar, so
+        a job that's still `underway` always counts as at least until
+        tomorrow even if its own estimate has technically already passed
+        (it's demonstrably not finished)."""
+        today = timezone.localdate()
+        latest_end = None
+        jobs = cls.objects.filter(
+            status__in=[cls.Status.NOT_STARTED, cls.Status.UNDERWAY],
+            start_date__isnull=False,
+        )
+        for job in jobs:
+            end = job.start_date + dt.timedelta(days=job.duration_days)
+            if end <= today:
+                end = today + dt.timedelta(days=1)
+            if latest_end is None or end > latest_end:
+                latest_end = end
+        return latest_end
 
 
 # ---- work photos ---------------------------------------------------------

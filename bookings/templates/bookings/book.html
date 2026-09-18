@@ -16,6 +16,13 @@
         <h1>Book a job</h1>
         <p>Tell me which job you'd like to go ahead with. I'll confirm the price and a
            start date with you, then you can secure the booking in your projects.</p>
+        <p class="bookings-page__availability">
+            {% if next_available %}
+                Next available: <strong>{{ next_available|date:"j F Y" }}</strong>
+            {% else %}
+                <strong>Available now</strong>
+            {% endif %}
+        </p>
     </header>
 
     <div class="bookings-card">

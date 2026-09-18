@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.core import mail
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import ContactEnquiry, SiteContact
 
@@ -63,6 +66,36 @@ class SiteContactModelTests(TestCase):
 
     def test_photo_url_uses_a_placeholder_when_empty(self):
         self.assertIn("placehold", SiteContact.load().photo_url)
+
+
+class AvailabilityOnContactPageTests(TestCase):
+    """The "Availability" line on Contact us - computed automatically from
+    booked Job rows (bookings.models.Job.next_available_date), not set by
+    hand. See bookings/tests.py for the computation itself; this just
+    checks the Contact page actually shows it."""
+
+    def test_shows_available_now_with_nothing_booked(self):
+        resp = self.client.get(reverse("contact:index"))
+        self.assertContains(resp, "Available now")
+
+    def test_shows_next_available_once_a_job_is_booked(self):
+        from django.contrib.auth import get_user_model
+
+        from bookings.models import Job
+
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="cust", email="cust@example.com", password="pw1!pass"
+        )
+        start = timezone.localdate() + timedelta(days=5)
+        Job.objects.create(
+            user=user, title="Hall LVT", status=Job.Status.NOT_STARTED,
+            agreed_price=500, start_date=start,
+        )
+        resp = self.client.get(reverse("contact:index"))
+        self.assertNotContains(resp, "Available now")
+        self.assertContains(resp, "Next available")
+        self.assertContains(resp, (start + timedelta(days=3)).strftime("%Y"))
 
 
 @LOCMEM_MAIL

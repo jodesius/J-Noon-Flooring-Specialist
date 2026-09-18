@@ -206,9 +206,10 @@ class JobAdmin(admin.ModelAdmin):
                                  "quote_request", "customer_note")}),
         ("The job", {"fields": ("title", "summary", "site_address")}),
         ("Agreed terms", {
-            "fields": ("agreed_price", "start_date", "booking_fee_display",
-                       "total_paid_display", "total_refunded_display",
-                       "total_refund_settled_display", "balance_display"),
+            "fields": ("agreed_price", "start_date", "duration_days",
+                       "booking_fee_display", "total_paid_display",
+                       "total_refunded_display", "total_refund_settled_display",
+                       "balance_display"),
         }),
         ("Status", {"fields": ("status", "staff_notes", "reference",
                                "created_at", "confirmed_at", "updated_at")}),

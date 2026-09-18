@@ -75,6 +75,8 @@ def index(request):
     else:
         form = EnquiryForm()
 
+    from bookings.models import Job
+
     return render(
         request,
         "contact/index.html",
@@ -82,5 +84,6 @@ def index(request):
             "contact": contact,
             "form": form,
             "geoapify_key": settings.GEOAPIFY_API_KEY,
+            "next_available": Job.next_available_date(),
         },
     )

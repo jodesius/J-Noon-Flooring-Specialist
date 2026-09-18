@@ -602,6 +602,20 @@ class BookJobTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Send booking request")
 
+    def test_shows_available_now_with_nothing_booked(self):
+        resp = self.client.get(reverse("bookings:book"))
+        self.assertContains(resp, "Available now")
+
+    def test_shows_next_available_once_a_job_is_booked(self):
+        start = timezone.localdate() + timezone.timedelta(days=5)
+        Job.objects.create(
+            user=make_user("other"), title="Kitchen",
+            status=Job.Status.NOT_STARTED, agreed_price=500, start_date=start,
+        )
+        resp = self.client.get(reverse("bookings:book"))
+        self.assertNotContains(resp, "Available now")
+        self.assertContains(resp, "Next available")
+
     def test_post_creates_requested_job_and_emails(self):
         resp = self.client.post(reverse("bookings:book"), self._payload())
         self.assertRedirects(resp, reverse("bookings:projects"))
@@ -901,6 +915,82 @@ class JobMoneyTests(TestCase):
         Payment.objects.create(job=self.job, amount=Decimal("500.00"))
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.UNDERWAY)
+
+
+class NextAvailableDateTests(TestCase):
+    """Job.next_available_date() - computed automatically from what's
+    actually booked, instead of a date set (and forgotten) by hand."""
+
+    def test_none_with_nothing_booked(self):
+        self.assertIsNone(Job.next_available_date())
+
+    def test_a_future_booked_job_uses_start_plus_duration(self):
+        start = timezone.localdate() + timezone.timedelta(days=5)
+        Job.objects.create(
+            user=make_user(), title="Kitchen", status=Job.Status.NOT_STARTED,
+            agreed_price=500, start_date=start,
+        )
+        self.assertEqual(Job.next_available_date(), start + timezone.timedelta(days=3))
+
+    def test_a_longer_job_uses_its_own_duration_override(self):
+        start = timezone.localdate() + timezone.timedelta(days=5)
+        Job.objects.create(
+            user=make_user(), title="Whole house", status=Job.Status.NOT_STARTED,
+            agreed_price=5000, start_date=start, duration_days=10,
+        )
+        self.assertEqual(Job.next_available_date(), start + timezone.timedelta(days=10))
+
+    def test_the_latest_of_several_booked_jobs_wins(self):
+        today = timezone.localdate()
+        Job.objects.create(
+            user=make_user("a"), title="Job A", status=Job.Status.NOT_STARTED,
+            agreed_price=500, start_date=today + timezone.timedelta(days=2),
+        )
+        Job.objects.create(
+            user=make_user("b"), title="Job B", status=Job.Status.NOT_STARTED,
+            agreed_price=500, start_date=today + timezone.timedelta(days=20),
+            duration_days=5,
+        )
+        self.assertEqual(
+            Job.next_available_date(), today + timezone.timedelta(days=25)
+        )
+
+    def test_requested_or_awaiting_deposit_jobs_do_not_count(self):
+        """Nothing's actually confirmed yet - no price/date agreed, or the
+        booking fee isn't even paid - so it shouldn't block the calendar."""
+        Job.objects.create(
+            user=make_user("a"), title="Just asked", status=Job.Status.REQUESTED,
+            start_date=timezone.localdate() + timezone.timedelta(days=1),
+        )
+        Job.objects.create(
+            user=make_user("b"), title="Awaiting fee",
+            status=Job.Status.AWAITING_DEPOSIT, agreed_price=500,
+            start_date=timezone.localdate() + timezone.timedelta(days=1),
+        )
+        self.assertIsNone(Job.next_available_date())
+
+    def test_completed_and_cancelled_jobs_do_not_count(self):
+        Job.objects.create(
+            user=make_user("a"), title="Done", status=Job.Status.COMPLETE,
+            agreed_price=500, start_date=timezone.localdate() - timezone.timedelta(days=30),
+        )
+        Job.objects.create(
+            user=make_user("b"), title="Cancelled", status=Job.Status.CANCELLED,
+            agreed_price=500, start_date=timezone.localdate() + timezone.timedelta(days=5),
+        )
+        self.assertIsNone(Job.next_available_date())
+
+    def test_an_overrunning_underway_job_is_at_least_tomorrow(self):
+        """The naive start+duration estimate has already passed but the
+        job is still marked underway - so it can't be "available now"."""
+        start = timezone.localdate() - timezone.timedelta(days=10)
+        Job.objects.create(
+            user=make_user(), title="Running long", status=Job.Status.UNDERWAY,
+            agreed_price=500, start_date=start, duration_days=3,
+        )
+        self.assertEqual(
+            Job.next_available_date(), timezone.localdate() + timezone.timedelta(days=1)
+        )
 
 
 class InvoiceTests(TestCase):
@@ -1713,7 +1803,7 @@ class StaffManageTests(TestCase):
     def test_confirm_booking_from_portal(self):
         resp = self.client.post(self._detail(), {
             "action": "confirm", "agreed_price": "1500",
-            "start_date": self._future(),
+            "start_date": self._future(), "duration_days": "3",
             "summary": "LVT to the hall", "contact_name": "Cass Customer",
             "contact_phone": "", "site_address": "1 A Street, Chelmsford",
         })

@@ -319,13 +319,14 @@ class ConfirmBookingForm(forms.ModelForm):
 
     class Meta:
         model = Job
-        fields = ["agreed_price", "start_date", "summary",
+        fields = ["agreed_price", "start_date", "duration_days", "summary",
                   "site_address", "contact_name", "contact_phone"]
         widgets = {
             "start_date": forms.DateInput(attrs={"type": "date"}),
             "summary": forms.Textarea(attrs={"rows": 3}),
             "site_address": forms.Textarea(attrs={"rows": 2}),
         }
+        labels = {"duration_days": "How many days will this take?"}
 
     def clean(self):
         cleaned = super().clean()

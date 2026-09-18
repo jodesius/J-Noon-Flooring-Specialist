@@ -288,9 +288,10 @@ Dependencies are pinned in `requirements.txt`.
   customer said when booking. Then the stage-appropriate controls (a `POST`
   from a non-staff user 404s):
   - *Booking requested* → a form to set the **agreed price** (with the old
-    quote figure right there to judge against), **start date**, work summary
-    and contact details, then **"Accept & confirm booking"** (→ *Awaiting
-    booking fee*), or decline.
+    quote figure right there to judge against), **start date**, **how many
+    days it'll take** (defaults to 3 - feeds the availability line above),
+    work summary and contact details, then **"Accept & confirm booking"**
+    (→ *Awaiting booking fee*), or decline.
   - *Awaiting booking fee* → **"Confirm £N received"** (pick the method),
     where **N is 20% of the agreed price**, logs the deposit `Payment`,
     which moves the job to **Booked – not started**.
@@ -463,8 +464,19 @@ one consistent story regardless of how the money moved.
 
 - **`SiteContact`** — a single admin-editable record (photo, personal
   intro, phone, email, enquiry recipient, coverage radius, service-area
-  town list, response-time line, social links). The page reads it, so the
-  business can change any of it without a code change. The photo box uses
+  town list, response-time line, social links). The page reads it, so
+  the business can change any of it without a code change. **Availability**
+  — an "Available now" / "Next available: N Month Year" line on both the
+  Contact page and Book a job — is computed automatically
+  (`Job.next_available_date()`), not set by hand: it's the day after the
+  latest currently-booked job (booked-not-started or underway) is
+  expected to finish, worked out from that job's `start_date` +
+  `duration_days` (a new field on `Job`, defaulting to 3 - bumped up per
+  job for anything bigger when Joseph confirms the booking). Nothing
+  booked at all → "Available now". An `underway` job whose naive
+  estimate has already elapsed still counts as at least "not before
+  tomorrow", rather than wrongly claiming to be free while actively
+  mid-job. The photo box uses
   `aspect-ratio` (matching the source image's own proportions) rather than
   a fixed `max-height`, so the crop stays identical at every screen width
   instead of framing the photo differently at each breakpoint.
@@ -1362,7 +1374,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **250**, across `core`,
+tests where they add lasting value (currently **261**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

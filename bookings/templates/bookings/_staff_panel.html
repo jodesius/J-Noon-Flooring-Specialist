@@ -75,6 +75,7 @@ Context: job, confirm_form, payment_form, admin_url.
             <input type="hidden" name="action" value="confirm">
             {% include "bookings/_field.html" with field=confirm_form.agreed_price %}
             {% include "bookings/_field.html" with field=confirm_form.start_date %}
+            {% include "bookings/_field.html" with field=confirm_form.duration_days %}
             {% include "bookings/_field.html" with field=confirm_form.summary %}
             {% include "bookings/_field.html" with field=confirm_form.contact_name %}
             {% include "bookings/_field.html" with field=confirm_form.contact_phone %}

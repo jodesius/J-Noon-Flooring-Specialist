@@ -55,6 +55,14 @@
                         <span>{{ contact.response_time }}</span>
                     </li>
                 {% endif %}
+                <li>
+                    <span class="contact-details__label">Availability</span>
+                    {% if next_available %}
+                        <span>Next available {{ next_available|date:"j F Y" }}</span>
+                    {% else %}
+                        <span>Available now</span>
+                    {% endif %}
+                </li>
             </ul>
 
             {% if contact.facebook or contact.instagram %}

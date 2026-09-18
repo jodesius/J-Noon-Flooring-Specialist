@@ -31,6 +31,16 @@
     max-width: 54ch;
     color: #f0e4d6;
 }
+.bookings-page__availability {
+    display: inline-block;
+    margin: 1rem auto 0 !important;
+    padding: 0.4rem 0.9rem;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    font-size: 0.9rem;
+}
+.bookings-page__availability strong { color: #fff; }
 .bookings-page__back {
     text-align: center;
     margin-top: 1.75rem;
