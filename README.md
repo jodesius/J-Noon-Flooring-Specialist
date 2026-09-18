@@ -352,11 +352,24 @@ one consistent story regardless of how the money moved.
   to type an amount that then gets silently ignored in favour of charging
   the whole balance. Both lead to
   **our own branded checkout page** (`/bookings/pay/<uuid>/`): our layout,
-  the customer's name / email / job address / a "I authorise this payment"
+  the customer's name / email / job address / an "I authorise this payment"
   checkbox, and **Stripe Elements** for the billing address and card
   fields. Card details go straight from the browser to Stripe — this server
   only ever handles the PaymentIntent id and status (PCI SAQ A). A
-  `CardPayment` row tracks each attempt. Hitting **"Pay"** shows the same
+  `CardPayment` row tracks each attempt.
+  **The authorise checkbox leads its own text, at a proper tappable
+  size** (found broken on a real narrow phone during testing, 2026-09-18)
+  — the shared `.bk-field--check` layout (`row-reverse` + `flex-end`) was
+  built for a short one-line checkbox label and stranded this one's long,
+  multi-line legal paragraph's checkbox off to the side, easy to miss
+  entirely on a small screen. `.checkout__authorise` in `bookings.css`
+  overrides back to a conventional checkbox-then-label row with an
+  explicit 22px, on-brand-coloured box. The same underlying class is used
+  for the staff-only "this is more than they've paid" refund checkbox
+  too, which has a similarly long label and is likely affected the same
+  way — not fixed here since it wasn't reported and isn't customer-facing,
+  but worth applying the same fix if it ever is.
+  Hitting **"Pay"** shows the same
   full-screen **"please wait" overlay** as the AI quote ("Your payment is
   being processed… please don't close or refresh the page") and disables the
   button. (No browser `beforeunload` "leave site?" prompt — its wording is
