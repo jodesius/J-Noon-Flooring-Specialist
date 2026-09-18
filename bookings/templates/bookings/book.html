@@ -26,7 +26,7 @@
     </header>
 
     <div class="bookings-card">
-        <form method="post" novalidate class="bk-form">
+        <form method="post" novalidate class="bk-form" id="book-job-form">
             {% csrf_token %}
 
             {% if form.non_field_errors %}
@@ -67,8 +67,11 @@
         <a href="{% url 'bookings:index' %}">&larr; Back to bookings</a>
     </p>
 </section>
+
+{% include "bookings/_loading_overlay.html" with form_id="book-job-form" loading_title="Sending your booking request" loading_note="This'll only take a moment." %}
 {% endblock %}
 
 {% block extra_js %}
     <script src="{% static 'bookings/js/book_address.js' %}" defer></script>
+    <script src="{% static 'bookings/js/form_loading.js' %}" defer></script>
 {% endblock %}

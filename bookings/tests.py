@@ -611,6 +611,13 @@ class BookJobTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Send booking request")
 
+    def test_page_has_a_loading_overlay_locked_to_the_form(self):
+        resp = self.client.get(reverse("bookings:book"))
+        self.assertContains(resp, 'id="book-job-form"')
+        self.assertContains(resp, 'data-form-id="book-job-form"')
+        self.assertContains(resp, "Sending your booking request")
+        self.assertContains(resp, "form_loading.js")
+
     def test_shows_available_now_with_nothing_booked(self):
         resp = self.client.get(reverse("bookings:book"))
         self.assertContains(resp, "Available now")

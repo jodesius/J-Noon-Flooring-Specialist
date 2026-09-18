@@ -167,8 +167,10 @@ Dependencies are pinned in `requirements.txt`.
 - **A "please wait" overlay locks the form on submit** (found missing
   during real-user testing — impatient re-clicking could fire the same
   request twice) — "Booking your request now", same overlay/spinner used
-  by the AI quote page. Same fix on the customer portal's chat "Send"
-  form ("Sending your message"), which needed a *targeted* version
+  by the AI quote page. The same fix went on **Book a job**'s "Send
+  booking request" button ("Sending your booking request") and the
+  customer portal's chat "Send" form ("Sending your message"), the
+  latter needing a *targeted* version
   (`bookings/static/bookings/js/form_loading.js`, keyed off the
   overlay's own `data-form-id` rather than a page-wide `.bk-form`
   selector) since that page can have more than one form on it at once
@@ -1399,7 +1401,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **262**, across `core`,
+tests where they add lasting value (currently **265**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.
