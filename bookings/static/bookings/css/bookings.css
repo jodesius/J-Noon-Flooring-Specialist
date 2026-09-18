@@ -164,6 +164,37 @@
 .bk-field--check > label { font-weight: 500; }
 .bk-field--check input { width: auto; }
 
+/* live address suggestions (book a job) */
+.address-suggest {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    z-index: 20;
+    margin-top: 2px;
+    background: #fdfbf9;
+    border: 1px solid #c7bdb1;
+    border-radius: 6px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    max-height: 220px;
+    overflow-y: auto;
+}
+.address-suggest__item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    font-size: 0.92rem;
+    padding: 0.5rem 0.7rem;
+    border: none;
+    background: none;
+    color: #3f3a35;
+    cursor: pointer;
+}
+.address-suggest__item + .address-suggest__item { border-top: 1px solid #ece4d9; }
+.address-suggest__item:hover,
+.address-suggest__item.is-active { background: #f3ece1; }
+
 .bk-field__help { font-size: 0.83rem; color: #6b6b6b; }
 .bk-field__error { font-size: 0.83rem; color: #a4291f; }
 .bk-field--invalid input,

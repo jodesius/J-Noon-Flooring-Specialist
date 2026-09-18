@@ -10,12 +10,22 @@ quote just carries on as before; the fitter still sees every request.
 import json
 import logging
 import math
+import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# The standard UK postcode pattern (as published by gov.uk / Royal Mail).
+UK_POSTCODE_RE = re.compile(
+    r"([Gg][Ii][Rr] ?0[Aa]{2})"
+    r"|((([A-Za-z][0-9]{1,2})|(([A-Za-z][A-Ha-hJ-Yj-y][0-9]{1,2})"
+    r"|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-Ha-hJ-Yj-y][0-9][A-Za-z]?))))"
+    r"\s?[0-9][A-Za-z]{2})"
+)
 
 # Chelmsford town centre - matches contact/static/contact/js/contact.js.
 DEFAULT_CENTRE = (51.7356, 0.4685)
@@ -54,6 +64,41 @@ def postcode_point(postcode):
     if lat is None or lng is None:
         return None
     return float(lat), float(lng)
+
+
+def extract_postcode(text):
+    """The last UK-postcode-shaped substring in free text, or None - a real
+    address almost always ends with its postcode, so the last match beats
+    the first if something earlier (e.g. a house name) coincidentally
+    matches the pattern too."""
+    match = None
+    for match in UK_POSTCODE_RE.finditer(text or ""):
+        pass
+    return match.group(0) if match else None
+
+
+def postcode_looks_real(postcode):
+    """True if postcodes.io confirms this postcode exists, False if it
+    positively says it doesn't, or None if we couldn't tell (network/API
+    trouble) - callers should treat None as "can't confirm", not as
+    invalid, so a third-party outage never blocks a real booking."""
+    pc = (postcode or "").strip()
+    if not pc:
+        return False
+    url = _API.format(urllib.parse.quote(pc, safe=""))
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "jnoon-flooring"})
+        with urllib.request.urlopen(request, timeout=6) as resp:
+            data = json.load(resp)
+        return bool((data or {}).get("result"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        logger.info("postcodes.io existence check errored for %r: %s", pc, exc)
+        return None
+    except Exception as exc:
+        logger.info("postcodes.io existence check failed for %r: %s", pc, exc)
+        return None
 
 
 def _haversine_miles(a, b):

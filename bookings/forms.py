@@ -3,6 +3,7 @@ import datetime as _dt
 from django import forms
 from django.utils import timezone
 
+from .coverage import extract_postcode, postcode_looks_real
 from .models import (
     CallRequest, FlooringRate, Job, JobMessage, JobPhoto, Payment,
     QuoteRequest, RefundRequest,
@@ -212,8 +213,12 @@ class BookJobForm(forms.ModelForm):
             "title": forms.TextInput(
                 attrs={"placeholder": "e.g. LVT to the kitchen and hallway"}
             ),
-            "site_address": forms.Textarea(
-                attrs={"rows": 2, "placeholder": "House / flat, street, town, postcode"}
+            "site_address": forms.TextInput(
+                attrs={
+                    "placeholder": "Start typing the address…",
+                    "autocomplete": "off",
+                    "id": "id_site_address",
+                },
             ),
             "customer_note": forms.Textarea(
                 attrs={"rows": 4, "placeholder": "Anything you'd like me to know - "
@@ -240,7 +245,8 @@ class BookJobForm(forms.ModelForm):
         for name in ("title", "site_address", "contact_name"):
             self.fields[name].required = False
         self.fields["site_address"].help_text = (
-            "Full address - house / flat, street, town and postcode."
+            "Start typing and pick your address from the list, or type it "
+            "in full - just make sure the postcode's included."
         )
         self.fields["customer_note"].help_text = ""
 
@@ -287,6 +293,22 @@ class BookJobForm(forms.ModelForm):
         ):
             if not (cleaned.get(name) or "").strip():
                 self.add_error(name, message)
+
+        address = cleaned.get("site_address")
+        if address and "site_address" not in self.errors:
+            postcode = extract_postcode(address)
+            if not postcode:
+                self.add_error(
+                    "site_address",
+                    "That doesn't look like a full address - please include "
+                    "a postcode.",
+                )
+            elif postcode_looks_real(postcode) is False:
+                self.add_error(
+                    "site_address",
+                    "That postcode doesn't look right - please check it and "
+                    "try again.",
+                )
         return cleaned
 
 

@@ -275,6 +275,9 @@ def book(request):
     else:
         form = BookJobForm(user=request.user, initial=_booking_initial(request))
 
+    form.fields["site_address"].widget.attrs["data-geoapify-key"] = (
+        settings.GEOAPIFY_API_KEY
+    )
     return render(request, "bookings/book.html", {"form": form})
 
 

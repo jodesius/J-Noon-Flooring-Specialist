@@ -1,5 +1,6 @@
 import io
 import json
+import urllib.error
 from decimal import Decimal
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -399,6 +400,48 @@ class CoverageTests(TestCase):
 
         self.assertEqual(coverage_status("ZZ1 1ZZ"), ("unknown", None))
 
+    # -- postcode extraction / existence check (book-a-job address) ----
+
+    def test_extract_postcode_finds_it_at_the_end_of_an_address(self):
+        from bookings.coverage import extract_postcode
+
+        self.assertEqual(
+            extract_postcode("12 Example Street, Chelmsford, CM1 2TS"),
+            "CM1 2TS",
+        )
+
+    def test_extract_postcode_returns_none_for_garbage(self):
+        from bookings.coverage import extract_postcode
+
+        self.assertIsNone(extract_postcode("xxxx"))
+        self.assertIsNone(extract_postcode(""))
+
+    @patch("bookings.coverage.urllib.request.urlopen")
+    def test_postcode_looks_real_true_when_the_api_confirms_it(self, mock_open):
+        from bookings.coverage import postcode_looks_real
+
+        mock_open.return_value = self._urlopen_returning(
+            {"result": {"latitude": 51.74, "longitude": 0.47}}
+        )
+        self.assertTrue(postcode_looks_real("CM1 1AA"))
+
+    @patch(
+        "bookings.coverage.urllib.request.urlopen",
+        side_effect=urllib.error.HTTPError("url", 404, "not found", {}, None),
+    )
+    def test_postcode_looks_real_false_on_a_definitive_404(self, _mock):
+        from bookings.coverage import postcode_looks_real
+
+        self.assertFalse(postcode_looks_real("ZZ99 9ZZ"))
+
+    @patch("bookings.coverage.urllib.request.urlopen", side_effect=OSError("boom"))
+    def test_postcode_looks_real_is_none_when_the_api_is_unreachable(self, _mock):
+        """None, not False - an outage shouldn't block a real booking, only
+        a confirmed-invalid postcode should."""
+        from bookings.coverage import postcode_looks_real
+
+        self.assertIsNone(postcode_looks_real("CM1 1AA"))
+
 
 class OutOfAreaQuoteTests(TestCase):
     def _qr(self, postcode="XX1 1XX"):
@@ -529,6 +572,12 @@ class BookJobTests(TestCase):
         self.user = make_user()
         self.client.force_login(self.user)
         set_staff_notify_email()
+        # Real postcode lookups are covered separately in CoverageTests /
+        # the dedicated tests below - default to "confirmed real" here so
+        # the rest of this class isn't making live HTTP calls.
+        patcher = patch("bookings.forms.postcode_looks_real", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _payload(self, **extra):
         data = {
@@ -614,6 +663,32 @@ class BookJobTests(TestCase):
         self.assertContains(resp, reverse("bookings:book"))
         self.assertContains(resp, reverse("bookings:projects"))
 
+    # -- address must contain a real postcode ---------------------------
+
+    def test_address_without_a_postcode_shaped_string_is_rejected(self):
+        resp = self.client.post(
+            reverse("bookings:book"), self._payload(site_address="xxxx")
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Job.objects.count(), 0)
+
+    @patch("bookings.forms.postcode_looks_real", return_value=False)
+    def test_address_with_a_postcode_that_does_not_exist_is_rejected(self, _mock):
+        resp = self.client.post(
+            reverse("bookings:book"),
+            self._payload(site_address="1 Made Up Street, ZZ99 9ZZ"),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Job.objects.count(), 0)
+
+    @patch("bookings.forms.postcode_looks_real", return_value=None)
+    def test_booking_still_succeeds_when_the_postcode_api_is_unreachable(self, _mock):
+        """An outage of the existence-check API shouldn't block a real
+        booking - only a confirmed-invalid postcode should."""
+        resp = self.client.post(reverse("bookings:book"), self._payload())
+        self.assertRedirects(resp, reverse("bookings:projects"))
+        self.assertEqual(Job.objects.count(), 1)
+
 
 @LOCMEM
 class QuoteToBookingTests(TestCase):
@@ -621,6 +696,9 @@ class QuoteToBookingTests(TestCase):
         self.user = make_user()
         self.client.force_login(self.user)
         set_staff_notify_email()
+        patcher = patch("bookings.forms.postcode_looks_real", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.quote = QuoteRequest.objects.create(
             user=self.user, service_option=QuoteRequest.Service.SUPPLY_FIT,
             postcode="CM1 2AB", rooms="kitchen and hall", contact_name="Dana Floors",

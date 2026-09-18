@@ -226,7 +226,17 @@ Dependencies are pinned in `requirements.txt`.
   they left blank** from their quote answers — name, phone, postcode, a
   suggested job title — so they don't retype it. Anything they do type
   wins. A reference that isn't one of their own quotes is rejected with a
-  form error. This creates a `Job` in status **Booking requested** and
+  form error. **The address is guaranteed to be a real one** — as they
+  type, live suggestions drop down (Geoapify's autocomplete API, same key
+  already used for the contact page's coverage map) and clicking one fills
+  the whole address; whether they use a suggestion or type it by hand, the
+  server independently pulls out whatever looks like a UK postcode
+  (`bookings/coverage.py:extract_postcode`) and confirms it's real against
+  postcodes.io (`postcode_looks_real`) before the booking's accepted — so
+  something like "xxxx" is rejected outright, while a genuine postcodes.io
+  outage doesn't block a real booking (an unconfirmable postcode is let
+  through, only a *definitely fake* one is rejected). This creates a `Job`
+  in status **Booking requested** and
   emails the business a clearly-labelled summary (customer name, address of
   works, the job, the linked quote). No payment is taken at this point.
   Honeypot-guarded, `JOB_REQUEST_DAILY_LIMIT` (default 3) per user per day.
@@ -1334,7 +1344,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **236**, across `core`,
+tests where they add lasting value (currently **244**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.
