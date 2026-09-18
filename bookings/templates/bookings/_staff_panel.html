@@ -163,7 +163,8 @@ Context: job, confirm_form, payment_form, admin_url.
         {% if stripe_ready %}
             <p class="staff-panel__note">
                 Card payments the customer makes record themselves, raise an invoice
-                and email you &mdash; only use this for cash / bank transfers.
+                and email you &mdash; only use this for cash (or a cheque) taken
+                in person.
             </p>
         {% endif %}
         <form method="post" class="bk-form staff-form">

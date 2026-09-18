@@ -278,8 +278,8 @@ Dependencies are pinned in `requirements.txt`.
   hero (admin/superuser only — `user.is_site_admin`), a staff-only card on
   `/bookings/`, and a link on the customer projects page.
 **Payments.** Money moves through the portal in four ways — the booking
-fee, a balance/part payment by card, a cash/bank payment staff record by
-hand, and a refund — and all four end up in the same place, the `Payment`
+fee, a balance/part payment by card, a cash payment staff record by hand,
+and a refund — and all four end up in the same place, the `Payment`
 ledger, so `Job.total_paid` / `total_refunded` / `balance_due` always tell
 one consistent story regardless of how the money moved.
 
@@ -326,9 +326,16 @@ one consistent story regardless of how the money moved.
   So Joseph never records card payments or issues those invoices by hand;
   his only touchpoints stay *Accept & confirm booking* and *Mark complete*.
   Stripe also emails the customer its own receipt (`receipt_email`).
-- Staff still record **cash / bank transfers** by hand from the manage
-  panel; card payments are the customer's own (staff get a 404 on the pay
-  routes). With **no Stripe keys** set, the buttons simply don't appear.
+- Staff record **cash payments** by hand from the manage panel, and get
+  the same automatic invoice a card payment gets (deposit / receipt /
+  final, worked out the same way) — the only manual step is Joseph typing
+  it in, not issuing the paperwork afterwards. "Bank transfer" isn't
+  offered as a method here any more (Stripe handles incoming card money
+  automatically) except when the payment **kind** is a Refund, since a
+  refund's money still goes out manually and that's often how it leaves.
+  Card payments are the customer's own (staff get a 404 on the pay
+  routes). With **no Stripe keys** set, the card buttons simply don't
+  appear.
 - **Overpayment is blocked, not just discouraged.** A part-payment can never
   exceed the outstanding balance (validated server-side, tested) — and
   since balances can now shrink mid-checkout (a refund landing while a
@@ -1309,7 +1316,7 @@ python manage.py test contact    # just the contact app
 ```
 
 Every feature is checked **both ways** before it is committed: automated
-tests where they add lasting value (currently **225**, across `core`,
+tests where they add lasting value (currently **228**, across `core`,
 `accounts`, `bookings`, `contact`, `reviews` and `gallery`), and a manual
 end-to-end pass in the browser for the full user journey and the look of
 each page.

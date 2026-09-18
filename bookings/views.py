@@ -386,8 +386,8 @@ def _handle_job_action(request, job):
             payment = form.save(commit=False)
             payment.job = job
             payment.save()
+            job.refresh_from_db()
             if payment.kind == Payment.Kind.REFUND:
-                job.refresh_from_db()
                 # A refund is a real transaction, same as any payment - it
                 # gets its own receipt so there's a paper trail for both
                 # sides, not just a ledger row nobody can point to.
@@ -405,7 +405,17 @@ def _handle_job_action(request, job):
                     f"{balance_note}.",
                 )
             else:
-                messages.success(request, f"£{payment.amount:.2f} payment recorded.")
+                # Same paper trail a card payment gets automatically - cash
+                # (or cheque/other) logged by hand shouldn't be any different.
+                is_fee = payment.kind == Payment.Kind.BOOKING_FEE
+                invoice = Invoice(job=job, kind=_invoice_kind_for(job, is_fee))
+                invoice.snapshot_from_job()
+                invoice.save()
+                invoice.ensure_default_line_item()
+                messages.success(
+                    request,
+                    f"£{payment.amount:.2f} payment recorded ({invoice.number}).",
+                )
         else:
             errors = " ".join(e for errs in form.errors.values() for e in errs)
             messages.error(request, f"Couldn't record that - {errors}")
@@ -818,10 +828,10 @@ def checkout(request, slug):
     })
 
 
-def _invoice_kind_for(cp):
-    if cp.purpose == CardPayment.Purpose.BOOKING_FEE:
+def _invoice_kind_for(job, is_booking_fee):
+    if is_booking_fee:
         return Invoice.Kind.DEPOSIT
-    balance = cp.job.balance_due
+    balance = job.balance_due
     if balance is not None and balance <= 0:
         return Invoice.Kind.FINAL
     return Invoice.Kind.RECEIPT
@@ -842,7 +852,10 @@ def _finalise_card_payment(request, cp):
         cp.mark_succeeded()  # ledger row + (for a deposit) job -> Booked
         if cp.invoice_id:
             return  # already finalised
-        invoice = Invoice(job=cp.job, kind=_invoice_kind_for(cp))
+        invoice = Invoice(
+            job=cp.job,
+            kind=_invoice_kind_for(cp.job, cp.purpose == CardPayment.Purpose.BOOKING_FEE),
+        )
         invoice.snapshot_from_job()
         invoice.save()
         invoice.ensure_default_line_item()

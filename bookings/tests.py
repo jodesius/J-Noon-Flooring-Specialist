@@ -1654,6 +1654,49 @@ class StaffManageTests(TestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.total_paid, Decimal("700"))
 
+    def test_recording_a_cash_payment_auto_issues_a_receipt(self):
+        """Cash logged by hand should leave the same paper trail a card
+        payment gets automatically - a part payment that doesn't clear
+        the balance gets a plain receipt."""
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        self.assertEqual(Invoice.objects.filter(job=self.job).count(), 0)
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "500", "kind": "part",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        invoices = Invoice.objects.filter(job=self.job)
+        self.assertEqual(invoices.count(), 1)
+        invoice = invoices.first()
+        self.assertEqual(invoice.kind, Invoice.Kind.RECEIPT)
+        self.assertTrue(invoice.line_items.exists())
+
+    def test_recording_a_cash_payment_that_clears_the_balance_issues_a_final_invoice(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("500"),
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "500", "kind": "balance",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        invoice = Invoice.objects.get(job=self.job)
+        self.assertEqual(invoice.kind, Invoice.Kind.FINAL)
+
+    def test_recording_a_cash_booking_fee_issues_a_deposit_invoice(self):
+        Job.objects.filter(pk=self.job.pk).update(
+            status=Job.Status.UNDERWAY, agreed_price=Decimal("1500"),
+        )
+        self.client.post(self._detail(), {
+            "action": "record_payment", "amount": "300", "kind": "booking_fee",
+            "method": "cash", "received_on": timezone.localdate().isoformat(),
+            "reference": "", "note": "",
+        })
+        invoice = Invoice.objects.get(job=self.job)
+        self.assertEqual(invoice.kind, Invoice.Kind.DEPOSIT)
+
     # -- refunds: recording one, and the customer's request -----------
 
     def test_record_refund_from_portal(self):

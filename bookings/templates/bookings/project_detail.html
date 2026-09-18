@@ -291,3 +291,32 @@
     </p>
 </section>
 {% endblock %}
+
+{% block extra_js %}
+    <script>
+        // "Bank transfer" as a payment method only makes sense for a
+        // refund (money going back out) - card payments are automatic
+        // via Stripe, so it's hidden for every other kind to stop it
+        // being picked by mistake for an incoming payment. No-ops
+        // entirely if the staff panel (and its form) isn't on the page.
+        (function () {
+            var kindField = document.getElementById("id_kind");
+            var methodField = document.getElementById("id_method");
+            if (!kindField || !methodField) return;
+            var bankOption = methodField.querySelector('option[value="bank"]');
+            if (!bankOption) return;
+
+            function syncBankOption() {
+                var isRefund = kindField.value === "refund";
+                bankOption.hidden = !isRefund;
+                bankOption.disabled = !isRefund;
+                if (!isRefund && methodField.value === "bank") {
+                    methodField.value = "cash";
+                }
+            }
+
+            kindField.addEventListener("change", syncBankOption);
+            syncBankOption();
+        })();
+    </script>
+{% endblock %}
